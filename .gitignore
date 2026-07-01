@@ -1,0 +1,21 @@
+# Local, per-checkout runtime configuration — never committed.
+# Claude Code's local tool-permission grants (e.g. the external-review wrapper
+# Bash allowlist) live here; they are machine-specific, not shared.
+.claude/settings.local.json
+
+# Touchstone lives under a single self-contained repo-root `.touchstone/` namespace.
+# In THIS (the SOURCE) repo we commit the methodology machinery under
+# `.touchstone/methodology/` via the negation below, so the installable payload bytes
+# are tracked and dogfooded in place. Everything else under `.touchstone/` stays
+# ignored: the mutable working artifacts — plans/, per-topic logs/, external-model
+# ext-review/ — and the root marker files (.session-state.md / .open-dilemmas.md /
+# .consult-evidence.md). `/.touchstone/*` ignores the CONTENTS (a whole-dir
+# `/.touchstone/` ignore could not be negated), then `!/.touchstone/methodology/`
+# re-includes just the machinery.
+# (A HOST repo that installs Touchstone gets this SAME two-line negation model by
+# default: it commits the vendored `.touchstone/methodology/` and ignores only the
+# artifacts, so a fresh checkout has Touchstone ready for contributors. A host can opt
+# out with `install.sh --ignore-all`, which writes a blanket `/.touchstone/` line instead
+# and versions none of the machinery.)
+/.touchstone/*
+!/.touchstone/methodology/
