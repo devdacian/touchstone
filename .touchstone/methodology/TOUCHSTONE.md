@@ -203,7 +203,12 @@ is the default lens for diagnosing a skill that keeps missing the same thing.
 
 **Planning-time premise verification.** Classify every load-bearing factual
 premise a plan item depends on before drafting suggestions or briefing the
-consult. **Confirm it during planning** when it materially affects the design and
+consult. A load-bearing claim about what the repo contains or establishes is one
+of these premises even when it arrives stated as fact — your own recollection, an
+inherited plan's assertion, a bug report, a prior unit's notes. That is how this
+class escapes classification: it presents as knowledge rather than as an
+assumption, so a scan for what you are assuming passes over it.
+**Confirm each premise during planning** when it materially affects the design and
 can be checked with bounded, non-destructive work from the current repo, local
 runtime, installed CLI help/version output, dry-run/read-only commands, approved
 low-cost smoke tests, or authoritative current documentation. **Defer only** when
@@ -709,10 +714,18 @@ lens applied to the wrong region).
     recoverable. For each behavior the change adds, name the premise it rests on
     (why a record can be stale here; why an append-only accumulation is needed when
     an earlier step already wipes this state) and locate where the repo or artifact
-    establishes it; a premise you cannot ground is the finding. This is irreducibly
-    judgment — no grep stands in for it. *(Also applies at planning time: treat a
-    deferred premise that WAS checkable now — per step 1's confirm/defer criteria —
-    as a plan-level finding.)*
+    establishes it; a premise you cannot ground is the finding. Identifying which
+    premises are load-bearing, and judging whether what you found establishes them,
+    is irreducibly judgment — no grep stands in for either. *(Also applies at
+    planning time: treat a deferred premise that WAS checkable now — per step 1's
+    confirm/defer criteria — as a plan-level finding.)* A load-bearing claim about
+    what the repo contains or establishes is a load-bearing premise, not context:
+    where the artifact states such a claim as fact — a count, a scope, a rule it
+    says exists — verify it at the revision the claim is about, rather than reading
+    past it. The state in front of you is not evidence about another one; where you
+    cannot determine which revision the claim is about, or cannot reach that
+    revision, report the premise as unresolved rather than substituting what you
+    can reach.
 
 18. **Altitude / proportionality.** Every other lens asks *is this correct?*; this one
     asks *should this exist, and is it the right size?* Both directions are findings: a
@@ -827,8 +840,13 @@ reader are).
 **2. Verify cited evidence (mandatory, per finding — BEFORE evaluating).** Default
 to verifying every finding's cited evidence: for repo/local claims, run
 `grep -n <token> <cited-file>` against the cited line and the modified-region's
-surrounding context; for web-backed claims, verify that the URL resolves and that
-the quoted substance is present or materially represented at the cited source
+surrounding context, and determine which revision the claim at issue is about,
+verifying there too when it is not the working tree — a working-tree grep neither
+confirms nor contradicts a claim about another revision, so where you cannot
+determine which revision the claim is about, or cannot reach that revision, record
+the grep as non-dispositive rather than as confirmation; for web-backed claims,
+verify that the URL resolves
+and that the quoted substance is present or materially represented at the cited source
 (record URL, source title/name or source class, access date, and quote/excerpt).
 Paste the command/check and result into the disposition entry's `Verification`
 field. The only valid opt-out is a finding with no code-level or external factual
@@ -847,7 +865,8 @@ Each disposition entry:
 Cited evidence: <reviewer's file:line / token / claim>
 Verification: <grep/web check run>
   <grep output, ≤5 lines, OR web URL/source/access-date/quote check,
-   OR "(empty)", OR "N/A — no code-level or external factual claim">
+   OR "(empty)", OR "non-dispositive — <why the revision could not be checked>",
+   OR "N/A — no code-level or external factual claim">
 Disposition: accept | reject | modify | adopt-inline | adopt-deferred
 Reasoning: <why, given the verified evidence>
 ```
@@ -881,12 +900,17 @@ teeth reaches only the external arm, so on the internal arm this record is the s
 audit surface these rejections have; it has to exist rather than be assumed. (Step
 4's consult-side rejections carry the same requirement in their own section.)
 
-An `unresolved external premise` finding uses the same dispositions, but it must
-close the factual lifecycle, not merely the finding row. If accepted or modified
-as load-bearing, record it as an open dilemma/deferred premise and do not
-terminate the loop until it is resolved. A reject closes it only with evidence
-that the premise is not load-bearing, is already established locally, or is
-irrelevant to the goal. A bare inability to verify does not close it.
+An `unresolved external premise` finding — or a load-bearing premise reported
+unresolved, or whose verification was recorded non-dispositive, because the
+revision it concerns could not be identified or reached — uses the same
+dispositions, but it must close the factual lifecycle, not merely the finding row.
+A **reject is the only disposition that closes it**, and only with evidence that
+the premise is not load-bearing, is already established locally — for a claim about
+another revision, established *at that revision*, since the working tree is not
+evidence about another one — or is irrelevant to the goal. **Under every other
+disposition the premise stays open**: record it as an open dilemma/deferred premise
+and do not terminate the loop until it is resolved. A bare inability to verify does
+not close it.
 
 Do not auto-apply. The value-add is the delta between the reviewer's advice and
 your final approach. Record each disposition with reasoning in the PRIOR ROUNDS
@@ -1299,7 +1323,11 @@ round, inline:
   **Lens #18 is always applicable and must be inlined in full, including its
   whole-artifact/every-round scope note** — that scope is precisely the clause a
   summarizing reviewer drops, and "each applicable lens" otherwise leaves room to
-  judge it inapplicable. **Inline § The review-prompt skeleton's component (b) — its
+  judge it inapplicable. **Lens #17 is likewise always applicable and must be
+  inlined in full, including its revision/degrade clause** — it is the only place
+  the external reviewer is told to report an unresolved premise for a *local* claim
+  about another revision, since item (a)'s mandated unresolved-premise reporting is keyed
+  to `unresolved external premise`. **Inline § The review-prompt skeleton's component (b) — its
   two standing reviewer instructions — here too, verbatim, beside the lenses they
   modify.** (This list's own item (b) is the brief-section contract; the skeleton's
   (b) is the failure-mode checklist. The two namespaces collide, so qualify which is
