@@ -153,7 +153,7 @@ missing_usage="$(
 assert_json_field "$missing_usage" 'data["classification"] != "reverse_wrapper_post_preflight_auth_transient"' || fail "missing usage classified"
 
 nonempty_model_usage="$(
-  python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); d["modelUsage"]={"claude-opus-4-8":{"inputTokens":1}}; print(json.dumps({
+  python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); d["modelUsage"]={"claude-opus-5":{"inputTokens":1}}; print(json.dumps({
     "runtime":"codex-cli",
     "attempted_wrapper":"external-review-claude.sh",
     "exit_code":1,

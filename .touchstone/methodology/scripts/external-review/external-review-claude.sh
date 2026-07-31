@@ -97,7 +97,7 @@ Usage: external-review-claude.sh --prompt <file> --schema <file> \
                     read-only tool set: Read,Grep,Glob + --add-dir <dir>). When
                     omitted the reviewer is prompt-only (--tools "") and the
                     orchestrator must inline all code into the prompt-file.
-  --model           Reviewer model pin (default: claude-opus-4-8).
+  --model           Reviewer model pin (default: claude-opus-5).
   --effort          Effort level: low|medium|high|xhigh|max (default: high).
   --max-budget-usd  Hard subscription-spend cap for the call (default: 5).
   --web-search      Enable Claude WebSearch/WebFetch for this round: on|off
@@ -156,7 +156,7 @@ if [ -z "${HOME:-}" ]; then
   exit 2
 fi
 
-MODEL="claude-opus-4-8"
+MODEL="claude-opus-5"
 EFFORT="high"
 MAX_BUDGET_USD="5"
 PROMPT=""

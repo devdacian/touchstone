@@ -60,7 +60,7 @@ Usage: external-review-codex.sh --prompt <file> --schema <file> --findings <file
   --log           Output path for the JSONL event stream (redirected stdout).
   --cd            REQUIRED. Repo the reviewer reads (no default — a forgotten
                   --cd is a loud exit-2 config error).
-  --model         Reviewer model pin (default: gpt-5.5).
+  --model         Reviewer model pin (default: gpt-5.6-sol).
   --effort        Reasoning effort (default: high — the field-validated level).
   --web-search    Enable the Codex hosted web_search tool for this round:
                   on|off (default: off). The off/default path passes
@@ -84,7 +84,7 @@ EOF
 # required-arg check below fails LOUD on a forgotten --cd (exit 2) instead of
 # silently reviewing the wrong dir.
 CD_DIR=""
-MODEL="gpt-5.5"
+MODEL="gpt-5.6-sol"
 EFFORT="high"
 PROMPT=""
 SCHEMA=""

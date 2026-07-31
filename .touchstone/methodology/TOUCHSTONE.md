@@ -169,6 +169,15 @@ Use imperative instructions ("Read the source files"), and explain *why*
 something matters rather than writing rigid ALL-CAPS ALWAYS/NEVER directives —
 agentic runtimes respond better to reasoning than to commands.
 
+**Rules, not history.** Skill and methodology prose — and design artifacts such as
+plans — carry rules valuable for the future, not the history of how each rule came to
+exist: no dates, versions, sessions, or incidents. Where a rule has a deliberately
+awkward shape, say what wrong edit that shape prevents, as a present-tense clause
+inside the rule itself, never as a note recounting the incident that produced it.
+Evidence that a rule paid off is not a reason to keep the evidence; the rule already
+says what to do. Evidence and disposition records are exempt — preserving history is
+their whole purpose.
+
 ## The process — context, consult, evaluate, implement, review
 
 Use the active runtime's `skill-creator` skill (or equivalent expert) for skill
@@ -250,6 +259,23 @@ approach** — not a rubber-stamp. An external recommendation is a CLAIM you ver
 and dispose exactly like an external-review finding; a wrong recommendation is
 rejected with recorded reasoning, never adopted because "the other model said so."
 
+**Advice that ADDS a mechanism carries an extra burden.** The stated task or a
+reported failure must require it, and the task's direct change must be unable to
+satisfy that need; hypothetical recurrence and "this would be more robust" are not
+reasons. Consult advice is the main route by which over-building enters a plan, and
+downstream reviewers see the mechanism only once it is already in the artifact. When
+the proposal is a checker, repair loop, or fixer wrapped around an *agent's* output,
+inspect the producing prompt first: if it never stated the output contract, stating
+it there is the fix, and the checker would only guard a contract the agent was never
+given. Prefer the smallest change that addresses the established root cause — where a
+symptom-only and a structural correction differ materially, surface both and justify
+the boundary. And prefer a clause on an existing rule to a new section: smaller
+surface, fewer sites to drift (`references/skill-improvement-strategies.md`'s
+"Strengthen before you add" is the same rule aimed at the skill under improvement).
+A rejection under this test records its basis in `Reasoning`, for the same reason
+§ Loop structure step 3 requires it of the review-loop licences: on the internal arm
+no severity floor watches these rejections, so the record is the only audit surface.
+
 ### 5. For non-trivial changes, draft a plan and run the review loop on it
 
 Iterate until you are satisfied. For simple changes (single-file edits, doc fixes,
@@ -280,6 +306,8 @@ design, the approach, the file set, the seams, and the *named* target of each
 change (this section, this function) — do NOT pre-enumerate every `file:line`.
 The implementation regenerates exact coordinates against the real files; a
 citation-dense plan is a nit-magnet that manufactures precision-only review rounds.
+A plan also carries rules, not the history of the rounds that produced them (§ Anatomy
+of a skill → *Rules, not history*).
 
 If the plan depends on load-bearing premises, record each as concise
 design-grounding: confirmed evidence (a one-line command-output summary, an
@@ -567,7 +595,12 @@ and cap reads at the same budget that contract sets, scaled to diff size. On a
 final-confirmation round, narrow the budget to the new delta plus named seams and
 state the rest was already cleared — but this is a *budget* bound, NOT an obligation
 waiver: the round still carries and verifies PRIOR ROUNDS DISPOSITION, so never write
-the absolute "review only the delta." A reviewer handed "the whole repo, verify everything" over-explores and
+the absolute "review only the delta." In the same spirit, after a soon-retired surface
+has had its mandatory review, weight subsequent depth toward the durable outputs —
+subject to the same non-waiver sentence above, which this points at rather than
+restating. And depth-weighting is not coverage: a loop that narrows to the newest text
+every round can leave an untouched unit unreviewed for many rounds, so name what the
+narrowing has left uncovered. A reviewer handed "the whole repo, verify everything" over-explores and
 trips the timeout *without finding anything*; the 2-narrow/3-stop counter above is
 the fallback once that has happened — this bound is the prevention.
 
@@ -611,7 +644,8 @@ envelope, by exactly the seams enumeration. (This widens the *envelope*, not the
 Construct each round's failure-mode checklist from the FULL catalogue below,
 applying every lens. The catalogue is the authoritative source; do not paste a
 partial list. Apply each lens *first* inside the modified region, *second* across
-the seams (the two-pass discipline catches bugs at the audit envelope's edge —
+the seams, plus — for lens #18 only — a third pass against the whole artifact every
+round, per its own scope note (the two-pass discipline catches bugs at the audit envelope's edge —
 most reviewer failures aren't lens failures, they're scope failures: the right
 lens applied to the wrong region).
 
@@ -680,7 +714,28 @@ lens applied to the wrong region).
     deferred premise that WAS checkable now — per step 1's confirm/defer criteria —
     as a plan-level finding.)*
 
-> *Numbering note: Tier 2 runs #10–#15 then #17 — #16 is reserved; don't hunt for
+18. **Altitude / proportionality.** Every other lens asks *is this correct?*; this one
+    asks *should this exist, and is it the right size?* Both directions are findings: a
+    mechanism addressing a failure nobody reported, and a guard whose blast radius exceeds
+    the defect it prevents. Under-engineering is equally reportable — a reported bug left
+    unguarded is the same lens the other way. For each mechanism the artifact proposes,
+    name the reported bug or established failure mode it serves, then ask whether a smaller
+    guard would do; ask *first* whether the task called for a mechanism at all, because a
+    task satisfied by an instruction, a deletion, or a one-line rule is not improved by a
+    guard around it. A directive ruling out a mechanism is not satisfied by rebuilding it
+    under another name — check the shape, not the label. A finding recommending removal is
+    never itself accretion: it proposes subtraction, so declining to file one for fear of
+    adding turns this lens into a silence (`references/skill-improvement-strategies.md`'s
+    "Pruning is a successful outcome, not a loss" is the same posture, aimed at the skill
+    under improvement). Unlike the other lenses, apply this one to the artifact **as a
+    whole, every round**, not only the modified region and the seams: a round scoped to the
+    newest text can verify each new mechanism's correctness indefinitely without ever asking
+    whether it belongs, and a fresh reviewer each round means nothing carries forward to
+    record that an earlier round already asked. That whole-artifact pass is a
+    proportionality *judgment over material already read* — it does not extend the read
+    budget.
+
+> *Numbering note: Tier 2 runs #10–#15 then #17–#18 — #16 is reserved; don't hunt for
 > a missing #16.*
 
 ### The review-prompt skeleton
@@ -690,7 +745,24 @@ Every round's prompt to an arms-length reviewer carries five components:
 **(a) The brief** — all sections from *The brief contract* above.
 
 **(b) The failure-mode checklist** — constructed from the FULL Tier 1 + Tier 2
-catalogue, every lens.
+catalogue, every lens. Two standing instructions to the reviewer travel with it:
+
+- **A recommendation to ADD a mechanism must name which reported failure it fixes
+  and why a smaller guard would not do.** "This would be more robust" is not
+  sufficient. Stopping an unwarranted proposal here is cheaper than disposing it
+  later, and the reviewer is the only party positioned to stop it before it exists.
+- **A terminable-precision finding is a non-defect: do not emit it.** The class is a
+  stale *locator into a still-correct target*, and it qualifies **only if both** hold
+  — (1) the reference resolves to the right file/section/symbol and only the locator
+  into it is stale, and (2) the stale locator lives only in the plan, is never copied
+  into the implementation, and is regenerated downstream. Exactly two shapes pass: an
+  off-by-N line number, and a renamed token correctly applied everywhere it is
+  design-load-bearing and absent only from a completeness list. It **fails** if the
+  target is wrong or deleted (a stale target is not a stale locator), if the reference
+  is itself an executed artifact, or if it touches design, logic, sequencing, data
+  flow, a seam, or a conditional path. **When unsure, treat it as actionable** — one
+  more round is bounded cost; a misclassified shipped defect is not. The two prongs
+  are conjunctive and must stay so: ORing them would wave a wrong target through.
 
 **(c) The scope-expansion permission** — include verbatim: *"If the modified
 region references files, agents, scripts, sections, or concepts not enumerated in
@@ -698,7 +770,8 @@ the brief's Modified region or Seams sections, surface that as a finding (the
 brief is under-scoped)."*
 
 **(d) The two-pass instruction** — apply each lens FIRST inside the modified
-region, SECOND across the seams.
+region, SECOND across the seams. Lens #18 additionally takes a whole-artifact pass —
+see its scope note in the catalogue, which is canonical for its cadence and scope.
 
 **(e) The cold-read step** — BEFORE applying the (b) lenses, the reviewer
 reconstructs — primarily from the artifact + repo, never the author's framing —
@@ -787,13 +860,26 @@ decide:
 - **reject** — decline with evidence-backed reasoning (typically: reviewer lacked
   context the orchestrator has, finding overgeneralizes, or remediation cost
   exceeds benefit). Cosmetic preferences (rewording, redundant safeguards) are
-  reject.
+  reject. A **terminable-precision** finding — a stale plan-only locator into a
+  still-correct target, per component (b)'s two-prong test — is rejected on the
+  remediation-cost ground: the implementation regenerates coordinates against the
+  real files. Reviewer severity is untouched and all three teeth apply unchanged
+  **where they apply (the external arm)**;
+  an orchestrator does not get to assign a severity that decides whether an
+  independent consult is required.
 - **adopt-inline** — a small (single-file, ≲10 lines, no design implication)
   pre-existing bug surfaced outside the change scope; fix it in the current diff.
   Being orthogonal or pre-existing is **not** a reason to defer.
 - **adopt-deferred** — a pre-existing issue whose fix would expand scope materially
   ("materially" = the fix's own size/effort/risk, not its topic). Append one line
   to a deferred-improvements file for later work.
+
+**The reject licences record their basis.** A rejection under component (b)'s
+mechanism-admission burden or on terminable-precision grounds records that basis —
+and, for a precision rejection, the two-prong verification — in `Reasoning`. § Three
+teeth reaches only the external arm, so on the internal arm this record is the sole
+audit surface these rejections have; it has to exist rather than be assumed. (Step
+4's consult-side rejections carry the same requirement in their own section.)
 
 An `unresolved external premise` finding uses the same dispositions, but it must
 close the factual lifecycle, not merely the finding row. If accepted or modified
@@ -805,6 +891,85 @@ irrelevant to the goal. A bare inability to verify does not close it.
 Do not auto-apply. The value-add is the delta between the reviewer's advice and
 your final approach. Record each disposition with reasoning in the PRIOR ROUNDS
 DISPOSITION section prepended to the next round's prompt.
+
+**Delete before repairing.** When the defect a finding reports sits in text *this
+change itself introduced*, ask whether that addition should be deleted before
+deciding how to repair it, and record the answer in the disposition. An addition
+that cannot name the reported bug it serves is a deletion candidate — repairing it
+instead spends the loop refining a mechanism that should not be there, which is how
+a review loop accretes while looking like it is converging. The test is provenance
+(added by this change vs pre-existing), not which round added it; where neither the
+diff nor the carried-forward disposition establishes provenance, the question does
+not arise. Deleting is still an artifact-mutating disposition: the adopt-side
+settled-design floor applies to the deletion's *effect*, not to who wrote the text.
+
+**The altitude check** (after every arm that returned this round has been disposed,
+before drafting the next version — arms return at different times, and the first
+arm's findings alone are a partial count). Ask whether the loop is **accreting rather
+than converging**. Any ONE of these is the signal; they are alternatives, never a
+checklist to satisfy jointly:
+
+*From the round in hand:*
+- findings are mostly about the *guards* rather than the *fix*;
+- a round's findings are *all* about tests, docs, or the plan document rather than
+  the behavior the change exists to deliver. Classify by delivered behavior, not by
+  whether the edited text gets committed; one behavior-touching finding suppresses
+  this shape. **For a change whose deliverable is itself a process file, the
+  delivered behavior is the rule being installed, while its plan and session notes
+  stay apparatus.**
+- the solution has grown bigger than the reported problem (lens #18 against the
+  current artifact) — including when the plan document has grown far out of
+  proportion to the change it describes, in which case strip it back to the design.
+  *Asked twice deliberately: by the reviewer via lens #18, by the orchestrator here.*
+
+*From the series across rounds:*
+- actionable findings declined and then rose again;
+- findings stay flat while the artifact grows every round;
+- findings keep concentrating in **one section** across consecutive rounds — that
+  section is the problem rather than the findings, so reconsider whether it should
+  exist before repairing it again, subject to the adopt-side settled-design floor.
+
+These cross-round shapes read the round-by-round series the orchestrator holds while the
+loop runs, so they degrade after a compaction — a deliberate limit, since minting a
+durable record to carry them across one is a larger mechanism than the signal justifies.
+The round-in-hand shapes need nothing beyond the current round, so losing the cross-round
+shapes never suppresses them.
+
+**The disjunction is load-bearing.** These are disjuncts, not a conjunction: ANDing
+any two can suppress a qualifying shape and make the trip-wire fail to fire. This is
+lens #15 read in reverse — a later editor tightening the rule must not turn it into
+a conjunction.
+
+**When one fires:** re-scope directly when the cause is clear from the artifact;
+route through § The unanticipated-problem escalation protocol only when you cannot
+resolve it from the plan, the artifact, or a sensible default — that protocol's own
+entry condition, so a fired shape does not mean a mandatory consult every round.
+
+**When every arm returned no-actionable, an altitude re-scope is not taken
+unilaterally.** There is no arm left to review it — a converged arm drops out
+permanently — so a mutation made then would escape review, and merely declaring the
+round non-terminating would wedge the loop: unable to terminate, with no reviewer
+permitted. Surface the fired shape in the result presented to the user; acting on it
+is a new change with its own loop.
+Do **not** open a dilemma for it — that would block the very termination this branch
+permits, and the signal's consumer is the user, who is being handed the result at
+exactly this moment.
+
+Report non-blockingly, and report **the size ratio, not the round count** —
+plan-to-change lines at step 5, apparatus vs delivered-behavior lines at step 7. No
+threshold attaches; the ratio is what makes "the solution outgrew the problem"
+checkable rather than a matter of impression. **This adds no new terminator and no
+un-convergence exception:** a converged arm stays permanently retired, and a fired
+shape never licenses leaving a finding undisposed. (Backstop, for the case the branch
+above forbids: if a mutation is applied anyway in a round that would otherwise
+terminate, that round is non-terminating. The two branches leave this unreachable by
+construction — a round terminates only when every arm returned no-actionable, which is
+exactly when the mutation is not taken — so it is stated once, as a floor, not as a
+mechanism.)
+
+**Settle existence before detail.** Settle "should this mechanism exist at all?"
+before spending rounds on its details. This scopes effort *within* the loop and never
+replaces a termination condition.
 
 **Fix-time class-sweep duty.** When an artifact-mutating disposition (accept,
 modify, adopt-inline) reveals a violated invariant, do not fix only the reported
@@ -1048,7 +1213,7 @@ absolute wrapper executable path for the trusted checkout or host repo, not `cla
 a directory, a repo-relative path, or a wildcard.
 
 **Invocation.** It runs headless `claude -p` with a sterile, billing-safe flag set:
-`--model` (default `claude-opus-4-8`), `--effort` (default `high`), `--max-budget-usd` (a hard
+`--model` (default `claude-opus-5`), `--effort` (default `high`), `--max-budget-usd` (a hard
 subscription-spend cap, default `5`), `--web-search <on|off>` (default `off`), `--wrapper-stderr-log <file>`
 (durable copy of wrapper-owned status markers), `--output-format json`, and `--json-schema` (the schema
 CONTENT, read from the schema file). Sterility is assembled by flag — `--setting-sources ''`
@@ -1130,7 +1295,17 @@ round, inline:
 - (b) the brief-section contract itself, so the scope-expansion permission has an
   anchor;
 - (c) each applicable lens with **enough description to be actionable** — a
-  one-word lens name under-applies exactly the seam/parity lenses bugs cluster on;
+  one-word lens name under-applies exactly the seam/parity lenses bugs cluster on.
+  **Lens #18 is always applicable and must be inlined in full, including its
+  whole-artifact/every-round scope note** — that scope is precisely the clause a
+  summarizing reviewer drops, and "each applicable lens" otherwise leaves room to
+  judge it inapplicable. **Inline § The review-prompt skeleton's component (b) — its
+  two standing reviewer instructions — here too, verbatim, beside the lenses they
+  modify.** (This list's own item (b) is the brief-section contract; the skeleton's
+  (b) is the failure-mode checklist. The two namespaces collide, so qualify which is
+  meant.) Item (a) names the skeleton's (b) only by function and mandates inlining for
+  the cold-read text alone, so nothing else carries them, and a prompt that omits them
+  silently drops both reviewer-side guards;
 - (d) for round N > 1, the PRIOR ROUNDS DISPOSITION carried forward, with the
   verbatim "claims to verify, not facts" instruction;
 - (e) the **search-termination contract**, inlined verbatim:
@@ -1204,7 +1379,9 @@ triggered design-reversal (the tie-break favors gating).
 round cap**; § Parallel-arm discipline → *Per-arm convergence / loop close-out* remains
 the **sole termination authority** (reject-only / adopt-deferred-only convergence with
 no open dilemma — single-route by design; Touchstone has no plan-review precision
-exception, so a future change adding one must update this section explicitly). For
+*exception*, so a future change adding one must update this section explicitly.
+Terminable-precision findings are *classified* — they are rejected on the
+remediation-cost ground, which is a disposition, not a route). For
 liveness the orchestrator surfaces a **non-blocking** progress summary **first at
 review-round 10, then every 5 review-rounds thereafter** (10, 15, 20, … counted since
 the loop last (re)started) — round count, whether the actionable-finding stream is

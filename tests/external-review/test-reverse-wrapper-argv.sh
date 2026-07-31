@@ -43,7 +43,7 @@ if [ "${1:-}" = "-p" ]; then
       printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"usage":{"input_tokens":1,"cache_read_input_tokens":0,"output_tokens":1},"modelUsage":{},"structured_output":{"verdict":"no actionable findings","findings":[]}}\n'
       ;;
     *)
-      printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"usage":{"input_tokens":1,"cache_read_input_tokens":0,"output_tokens":1},"modelUsage":{"claude-opus-4-8":{"inputTokens":1}},"structured_output":{"verdict":"no actionable findings","findings":[]}}\n'
+      printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"usage":{"input_tokens":1,"cache_read_input_tokens":0,"output_tokens":1},"modelUsage":{"claude-opus-5":{"inputTokens":1}},"structured_output":{"verdict":"no actionable findings","findings":[]}}\n'
       ;;
   esac
   exit 0

@@ -258,7 +258,7 @@ the direction that matches your orchestrator:
 
 - Install the **Codex CLI** and authenticate it (a ChatGPT subscription that
   includes Codex quota, or an OpenAI account).
-- The wrapper pins `gpt-5.5` at `high` reasoning effort and scrubs `OPENAI_API_KEY`
+- The wrapper pins `gpt-5.6-sol` at `high` reasoning effort and scrubs `OPENAI_API_KEY`
   so the run stays on the included subscription quota rather than per-token API
   billing.
 - For autonomous Claude Code runs, grant the wrapper in the **gitignored**
@@ -401,7 +401,7 @@ Whether Codex is your orchestrator (reverse path) or just the GPT reviewer (forw
 path), configure non-interactive operation in `~/.codex/config.toml`:
 
 ```toml
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 
 # Autonomous, with a safety net (the analog of Claude Code's auto mode):
@@ -482,7 +482,7 @@ internal-only (with a logged notice) if the external model is unreachable.
   re-raise match; evidence fields also carry web-source details for web-backed
   findings).
 - **Reviewer models.** Both wrappers take `--model` / `--effort`; the defaults
-  (`gpt-5.5` / `claude-opus-4-8`, `high`) are sensible starting points.
+  (`gpt-5.6-sol` / `claude-opus-5`, `high`) are sensible starting points.
 
 ## Background
 

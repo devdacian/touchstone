@@ -338,7 +338,7 @@ same file, because `codex exec` has a single stdin channel and no prompt-file fl
 inner `codex exec` command shown below, which is what the wrapper assembles and runs
 internally): `external-review-codex.sh --prompt <file> --schema <file> --findings <file>
 --log <file> --cd <repo>` are **all required flags** — a missing one is a loud **exit-2**
-config error — plus optional `--model` (default `gpt-5.5`), `--effort` (default `high`),
+config error — plus optional `--model` (default `gpt-5.6-sol`), `--effort` (default `high`),
 `--web-search <on|off>` (default `off`), and `--watchdog-seconds` (default `600`).
 (There is **no** `--usage-ledger`/`--round`:
 those are cyfrin-deliverables-only, absent from this wrapper.) Path validation differs by
@@ -355,7 +355,7 @@ assembling the prompt-file or invoking the wrapper. The wrapper runs:
 
 ```
 env -u OPENAI_API_KEY codex [--search] exec --ephemeral --cd <repo> --sandbox read-only \
-  --skip-git-repo-check -m gpt-5.5 -c model_reasoning_effort="high" [-c web_search=disabled] \
+  --skip-git-repo-check -m gpt-5.6-sol -c model_reasoning_effort="high" [-c web_search=disabled] \
   --output-schema .touchstone/methodology/scripts/external-review/findings.schema.json --json \
   -o <findings> < <prompt> > <log> 2>&1
 ```
@@ -367,8 +367,10 @@ wrapper's fail-closed default.
 
 Key points:
 
-- **`-m gpt-5.5 -c model_reasoning_effort="high"`** — the reviewer is pinned
+- **`-m gpt-5.6-sol -c model_reasoning_effort="high"`** — the reviewer is pinned
   explicitly so it stays deterministic even if the user's Codex default changes.
+  Model-id caution: use the plain published model id, not a `-codex`-suffixed
+  variant — a suffixed variant is not guaranteed to resolve under ChatGPT auth.
   `high` (not `xhigh`) is the field-validated effort; a round's cost is
   input-dominated (the repo reads), so escalate a specific thin round to `xhigh`
   only if it comes back thin.
