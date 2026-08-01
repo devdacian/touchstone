@@ -190,19 +190,26 @@ the writing context's in-memory state. The Claude-Code concrete rule, structured
   current-run obligation.
 - **Reader-disjointness.** `.touchstone/.session-state.md` is **NEVER consulted by the termination gate**
   (§ A deferred dilemma blocks termination) — only by the resume/reconcile path and the out-of-loop
-  retention pass (below). The terminator reads `.touchstone/.open-dilemmas.md`; keeping the
-  *terminator's* readers disjoint from the command record is what stops a stale `dispatched` from ever
-  reading as a termination blocker.
+  retention pass (below). The terminator reads the phase-appropriate dilemma home—the active plan
+  during plan review, or `.touchstone/.open-dilemmas.md` during implementation/no-plan phases—plus
+  `.touchstone/logs/<topic>/review-state.md` where that path maintains round blocks. Keeping those
+  termination readers disjoint from the command record is what stops a stale `dispatched` from ever
+  reading as a termination blocker. An incomplete review block is different: it deliberately leaves
+  its expected arm active and self-heals through a fresh artifact review.
 - **The retention reader (out-of-loop).** The session-artifact retention pass (TOUCHSTONE.md § Long-running
   session reliability) READS this record's in-flight set (guard 3) to gate a delete, but it is **not the
-  termination gate** — it runs *after* a loop has already terminated (same-session self-clean) or in a
-  later session (cross-session sweep). It is therefore a defined ADDITIONAL out-of-loop reader of
+  termination gate — same-session guard 4 independently proves clean step-7 review close-out before
+  deletion, from durable review state on round-block paths or from still-live in-context facts on a
+  machinery-free path (failing closed after a restart); the pass otherwise runs in a later session as
+  a user-confirmed cross-session sweep. It is
+  therefore a defined ADDITIONAL out-of-loop reader of
   `.touchstone/.session-state.md`; the invariant above still holds because the terminator's read set is
-  unchanged (still only `.open-dilemmas.md`), so a stale `dispatched` cannot false-block TERMINATION. The
+  still disjoint from command state (`.open-dilemmas.md` plus per-topic
+  `review-state.md`), so a stale `dispatched` cannot false-block TERMINATION. The
   retention pass writes NO marker file (no reset, no truncation, no prune): the state/dilemma records are
   append-only and inert-by-computation once all keys are terminal (§ Run-id open-ness), and
-  `.touchstone/.consult-evidence.md` is a survival record whose only mutation is copy-on-delete's
-  idempotent per-change-key overwrite/no-op. Retention mutates only the per-topic `logs/`/`ext-review/`/plan
+  `.touchstone/.consult-evidence.md` is the planning-skipped consult record and is not rewritten by
+  planned-change close-out. Retention mutates only the per-topic `logs/`/`ext-review/`/plan
   artefacts, and fails closed on any uncertainty (retain).
 - **The dispatch/completion binding.** Write `dispatched` (+ key + non-secret command/cwd/log/start
   context) BEFORE the background launch returns. Signal `completed` + exit status when the work
@@ -228,6 +235,31 @@ default (the fixed `.touchstone/.session-state.md` path + the dispatched/complet
 shape and in-flight-set math) already serves a runtime without its own notes file; this section is
 Claude Code's elaboration of those concretes (the key format, the runtime-tool dispatch/completion
 handles).
+
+## The review-state record location (Claude mechanism)
+
+`TOUCHSTONE.md` § Long-running session reliability → *Durable per-topic review
+state* is already construction-complete for every runtime. Claude Code uses that
+contract without a second state format:
+
+- fixed path: `.touchstone/logs/<topic>/review-state.md`, where `<topic>` is the
+  same canonical slug used by the live plan, consult evidence, and external-review
+  directory;
+- append `BEGIN ROUND` before launching either expected review arm and append
+  results, dispositions, counts, locality, per-arm state, and `END ROUND`
+  progressively through the same logical round;
+- keep retry, invalid-result, and timeout-replacement attempts inside that block;
+- append class sweeps as a separate stable-key revision series in the same note,
+  and exact ignored/untracked pre-images (or explicit `NOT PRESENT` sentinels) as
+  separate bounded records;
+- on resume, use the core's latest-complete selectors and incomplete-tail recovery
+  rules. Never infer convergence from an incomplete block and never replay a
+  partial mutation blindly.
+
+This note is topic-discoverable from the live plan/consult binding; it is not a
+root index and does not replace `.session-state.md`. The command-state,
+open-dilemma, consult-evidence, and review-state records remain separate because
+their readers and closure rules are different.
 
 ## The consult-evidence record location (Claude mechanism)
 
@@ -261,8 +293,9 @@ session-state record location:
 - **Gate reader (fails CLOSED, scope-first at step-7).** Before the first round of whichever review loop
   the change reaches (step-5 plan-review, or step-7 implementation-review for a planning-skipped change),
   read the consult-evidence record: the plan file's `## Consult evidence` section, or — for a
-  planning-skipped change, or a planned change whose plan file was already deleted (see copy-on-delete
-  below) — the `.touchstone/.consult-evidence.md` entry whose change-key matches the current change. Because
+  planning-skipped change — the `.touchstone/.consult-evidence.md` entry whose change-key matches the
+  current change. A planned change keeps its live plan through clean step-7 close-out, so both planned
+  gates read the same in-plan evidence and no copy-on-delete branch exists. Because
   *every* implemented change reaches step-7, the step-7 reader checks **scope first**: a change outside the
   class step 3 governs (a typo or mechanical fix) is not gated and proceeds; only an in-scope
   skill/methodology change requires the record. For an in-scope change, treat the consult as **not done —
@@ -275,18 +308,12 @@ session-state record location:
   changes. It does not turn typo fixes or mechanical edits into consult-required work, even though they
   reach step-7's review loop; a change that *voluntarily* uses a plan/review loop is gated only when the
   governing process required step 3 for it — plan-presence is not itself a consult trigger.
-- **Plan-deletion survival (copy-on-delete).** A *planned* change keeps its evidence in the plan file's
-  `## Consult evidence` section, but `TOUCHSTONE.md` deletes the plan file when the review loop exits clean —
-  so a planned change that later resumes at step-7 (after a clean step-5 plan-review deleted the plan)
-  would find no record and fail closed back to step 3 despite having satisfied the gate. Therefore, before
-  deleting a clean plan file, **copy its consult evidence into the fixed `.touchstone/.consult-evidence.md`
-  fallback in the residual reader's schema** — synthesize the **stable change-key** from the plan's topic
-  slug (the `<topic>` in `.touchstone/plans/<topic>-plan.md`) and emit the same three fields under it; a raw section
-  paste is NOT matchable, because the in-plan section carries no change-key. Make it **idempotent**:
-  re-running copy-on-delete for the same change-key overwrites/no-ops rather than appending a second entry,
-  so it can never create the duplicate-ambiguous record the residual reader rejects. This is purely
-  evidence *survival* — the gate stays the side-effect-free presence check above; a step-7 resume of a
-  plan-deleted change simply reads this fallback entry in place of the gone plan-file section.
+- **Plan lifecycle.** A planned change keeps its evidence in the live plan through
+  implementation, validation, and clean implementation-review convergence. Delete
+  the plan only during clean step-7 close-out, after both the open-dilemma and
+  review-state termination readers allow exit. The fixed
+  `.touchstone/.consult-evidence.md` fallback remains exclusively for
+  planning-skipped changes; planned close-out neither copies nor rewrites it.
 
 This is the Claude binding of the runtime-neutral requirement. `TOUCHSTONE.md`'s runtime-neutral
 default (the in-plan `## Consult evidence` section or the fixed `.touchstone/.consult-evidence.md`
@@ -425,19 +452,21 @@ availability/skip.
 
 <!-- SYNC: the health-signal contract here — the non-blocking thresholds (first at review-round 10, then every 5), the review-round-counting exclusions, the whole-review-loop scope, AND the advisory-grounding of the in-memory round-counter reset (signal is advisory → reset changes timing/visibility only, never correctness/termination; spend unbounded until convergence or interrupt) — mirrors the TOUCHSTONE.md § External cross-model review *Non-convergence health signal (no hard cap)* paragraph; update both together. -->
 **Non-convergence health signal (no hard cap) — Claude pin.** The external loop carries
-**no hard round cap**; reject-only / adopt-deferred-only convergence with no open
-dilemma stays the sole terminator (the authority is TOUCHSTONE.md § Parallel-arm
-discipline → *Per-arm convergence / loop close-out*). This pin mirrors **TOUCHSTONE.md
+**no hard round cap**; TOUCHSTONE.md § Parallel-arm discipline → *Per-arm
+convergence / loop close-out* remains the sole termination authority, including
+its full locality/durability/all-arms/open-dilemma conjunction. This pin mirrors **TOUCHSTONE.md
 § External cross-model review — *Non-convergence health signal (no hard cap)*** (the
 runtime-neutral authority for the values): surface a **non-blocking** progress summary
 **first at review-round 10, then every 5 review-rounds thereafter** (counted since the
 loop last (re)started — review rounds that reach disposition only, excluding wrapper
-retries, exit-2 config failures, and malformed-attestation re-spawns), and **continue
+retries, exit-2 config failures, malformed-attestation re-spawns, and
+delegated-timeout replacements), and **continue
 automatically** unless the user interrupts. The signal is **whole-review-loop scoped** —
 it fires for internal-only runs too, not only the external arm this Cost note is about,
 so adjacency to the external-only framing above does not narrow it. No new durable
-round-counter is minted (`.touchstone/.session-state.md` is command-lifecycle state, not
-round accounting). The in-memory round-counter reset is safe because the signal is **advisory**
+health-signal counter is minted: `review-state.md` records logical rounds for
+recovery, but neither it nor `.touchstone/.session-state.md` is the restart-local
+advisory counter. The in-memory round-counter reset is safe because the signal is **advisory**
 (non-blocking, user-interruptible): a reset changes the advisory signal's timing/visibility only,
 never correctness or termination. Full crash-restart rationale — including why there is no spend
 bound to lose — is canonical in TOUCHSTONE.md § Non-convergence health signal (no hard cap); see

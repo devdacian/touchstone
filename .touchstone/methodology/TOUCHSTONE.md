@@ -45,7 +45,8 @@ MUTABLE working artifacts:
     under `methodology/`.
 - **Mutable artifacts** (created during a run, per `<topic>`):
   - `.touchstone/plans/<topic>-plan.md` — the per-topic plan (design artefact).
-  - `.touchstone/logs/<topic>/` — per-topic command + session logs.
+  - `.touchstone/logs/<topic>/` — per-topic command + session logs, including the
+    append-only `review-state.md` for review rounds and class sweeps.
   - `.touchstone/ext-review/<topic>/` — external-model review outputs (prompts, findings, logs).
   - `.touchstone/.session-state.md`, `.touchstone/.open-dilemmas.md`,
     `.touchstone/.consult-evidence.md` — the three single root-level marker files. These
@@ -294,17 +295,15 @@ The plan is a markdown file at `.touchstone/plans/<topic>-plan.md` (kebab-case, 
 the artifact root — see § Configuration). All review-loop iterations **mutate that file** with the runtime's
 file-edit tool; do not re-emit the full plan in chat between rounds — re-emission
 defeats the diff-review affordance and reintroduces the in-chat-plan failure mode
-this rule exists to prevent. When the review loop exits with no actionable
-findings **and no open dilemma** (§ A deferred dilemma blocks termination), delete
-the plan file (a stale plan invites a future session to read it as current) — but
-**first preserve, into the runtime's durable consult-evidence record, any consult
-evidence the plan file is the sole carrier of**, because a planned change can still
-reach step-7's review loop after this deletion and the gate (§ The consult gates
-review-loop entry) must find that evidence there; the concrete preservation mechanism
-is runtime-specific. The "no
-open dilemma" precondition matters because the plan file is the plan-phase home of the
-open-dilemma note; deleting it on a round the termination invariant says is
-non-terminating would destroy the carrier and re-open silent-drop.
+this rule exists to prevent. Keep the approved plan live through implementation,
+validation, and the step-7 implementation-review loop: planned-change consult gates
+read its evidence directly, and implementation review needs the actual approved
+design rather than a copied residue. Delete it only as part of a **clean step-7
+close-out**, after every available review arm has converged and no open dilemma
+stands (§ A deferred dilemma blocks termination). A stale plan left after completed
+work invites a future session to read it as current; deleting it earlier removes
+the plan and its evidence while they still have live consumers. Planning-skipped
+work continues to use the fixed consult-evidence fallback.
 
 **Write the plan at the design layer, not the coordinate layer:** specify the
 design, the approach, the file set, the seams, and the *named* target of each
@@ -333,6 +332,18 @@ and code, plus issues that only surface in code (typos, off-by-one, broken
 cross-references). If the plan carried deferred premises, run each named
 implementation-time check that is now possible before spawning reviewers, and
 record evidence/status in the review prompt.
+
+After the consult-evidence gate passes and before assembling each implementation-
+review brief, perform a **whole-diff relational read**: read the scoped tracked diff
+end-to-end together with any scoped ignored/untracked before/after content, and
+compare related edits against each other. Check for prose and mechanisms that now
+state the same rule at different breadths, mutually inconsistent edits, or residue
+kept alive only by another contradictory edit. Repair only where the plan, goal,
+code, and a sensible default yield one unambiguous answer; otherwise leave the
+conflict visible and use § The unanticipated-problem escalation protocol. When the
+read exposes a class rather than a one-off, run § Fix-time class-sweep duty.
+Iterate the whole-diff read and any resulting sweep refresh until a full pass
+changes nothing, then assemble the briefs from that exact snapshot.
 
 ### Discipline that holds the process together
 
@@ -429,19 +440,85 @@ discipline targets work that can strand or duplicate, not every `grep`.)
   in a non-terminal needs-resolution state — live exactly like an open dilemma — and is
   escalated AS a deferred dilemma, retiring to a terminal marker only once that dilemma
   is disposed.)
+- **Durable per-topic review state.** A full-process change with a recoverable
+  canonical topic binding keeps one append-only
+  `.touchstone/logs/<topic>/review-state.md`. Before its first keyed append, create
+  the parent and a topic header. Its process-defined keyed families are
+  review-round blocks, class-sweep revisions, and bounded pre-image records; each
+  has matching BEGIN/END delimiters and only its named consumers read it. Other
+  bounded audit evidence may coexist but is never convergence input. This is
+  review state, not command lifecycle: the resume path may read it to reconstruct
+  review work, while `.touchstone/.session-state.md` remains the command record.
+
+  A logical plan- or implementation-review round gets a block whenever a
+  delegated internal or external arm belongs to that loop's expected arm set,
+  whether the arm returns, is known unavailable before dispatch, or becomes
+  unavailable after an attempt:
+
+  ```
+  BEGIN ROUND <topic>/<loop>/<round-key>
+  ...progressively appended fields...
+  END ROUND <topic>/<loop>/<round-key> outcome=completed
+  ```
+
+  Append `BEGIN ROUND` before dispatch, naming the artifact snapshot and expected
+  arms. Wrapper retries, exit-2 corrections, malformed-result re-spawns, and
+  delegated-timeout replacements are attempts inside the same logical block, not
+  extra rounds. Append normalized arm results (or explicit
+  `unavailable-skipped`), verified dispositions, raw per-arm and distinct reported
+  counts, post-disposition actionable count, locality granularity/result/mutation,
+  and each arm's active/converged/unavailable-skipped state as facts become known.
+  A complete block has an explicit value for every field; write `none` and zero
+  rather than omitting legitimately empty values. Append the matching `END` only
+  after that payload is complete.
+
+  An incomplete block never proves convergence. Unless a consumer explicitly says
+  otherwise, select within the **current topic and current loop**. Ordinary readers
+  use that loop's newest complete block for counts, locality, and per-arm state;
+  recovery reruns the current artifact rather than replaying a partial mutation.
+  Prompt carry-forward uses the
+  current loop's newest complete block's eligible rejection/modification/
+  adopt-deferred entries plus fully populated eligible entries from later
+  incomplete blocks; when no complete block exists, use the fully populated
+  eligible entries from every incomplete block in that loop. Deduplicate by claim
+  + location concept.
+  The contested-rejection gate scans every fully populated rejection of an
+  external-arm finding in this topic's plan- and implementation-review series, so
+  “any prior round” survives compaction and restart. This contested-rejection
+  lookup is the cross-loop exception. Per-arm close-out reads the current loop's
+  newest complete result for that arm.
+
+  Disposition entries written inside review-round blocks extend the generic
+  disposition shape with `Producing arm: internal | external` and
+  `Location concept:`. The generic template used by consults stays unchanged.
+  Before the first scoped mutation of a recoverable ignored/untracked topic
+  artifact, append an exact bounded `BEGIN PREIMAGE`/`END PREIMAGE` copy to this
+  note so the later whole-diff review has a before/after pair; if the artifact did
+  not exist, record an explicit `NOT PRESENT` sentinel instead of an empty body.
+
+  The machinery-free minimal loop and a direct-only narrow review with no external
+  arm in its expected set keep the same facts in context instead of writing round
+  blocks. If such a direct-only path also has no plan/consult topic binding, it
+  does not mint a topic record solely for review bookkeeping.
 - **Session-artifact retention (bounded growth).** A completed session's working
   artifacts under the artifact root (§ Configuration) — its `<topic>` plan, its
   `logs/<topic>/`, its `ext-review/<topic>/` — otherwise accumulate without bound over a
   checkout's life. Retire them under a fail-closed safety predicate, as a pass **distinct
-  from** the plan-delete-on-exit gate (which fires at clean review-loop exit, *before* the
-  deliverable is committed). The predicate has TWO modes:
+  from** the plan-delete-on-clean-step-7 gate (which fires before the deliverable is
+  committed). The predicate has TWO modes:
   - **Same-session self-clean** (runs only AFTER the user has committed the deliverable):
     delete this session's `<topic>` plan / `logs/<topic>/` / `ext-review/<topic>/` when ALL
     hold — (1) **durable**: the deliverable's actual commit exists in history (not merely a
     clean tree) AND (no upstream configured, OR pushed to upstream) — when no remote exists
     "committed" is the strongest available durability and is the correct bar; (2) the
     dilemma open-set is empty (§ A deferred dilemma blocks termination); (3) the command
-    in-flight set is empty. No content-age term: the durable record is the committed change,
+    in-flight set is empty; and (4) review close-out is proven under the path's
+    review regime. On a round-block path, the topic's implementation-review state
+    has no newer incomplete tail and its newest complete block records every
+    expected arm converged or unavailable-skipped. In a still-live machinery-free
+    same session, use the equivalent in-context clean-close-out proof. After a
+    restart that lost record-free facts, or on any ambiguity, fail closed. No
+    content-age term: the durable record is the committed change,
     not the gitignored logs.
   - **Cross-session backlog sweep**: a later session may retire a PRIOR topic's artefacts,
     but a prior topic's open-set/in-flight markers no longer exist to evaluate guards (2)/(3),
@@ -538,10 +615,12 @@ dilemma re-deferred keeps its key (no duplicate open entry), but a dilemma resol
 later re-raised is a new instance with a new key, so a stale resolution marker can never
 close it; the writer tells the two apart by checking whether the entry's current key
 already has a matching resolution in the record (still open → keep the key; already
-resolved → mint a new one); *delete* the file at loop exit only under "no actionable
-findings AND no open dilemma," so it is never destroyed while an entry is open. Inside a review loop the note is ALSO carried
-alongside PRIOR ROUNDS DISPOSITION for reviewer visibility — that carry is not the
-guarantee (the durable record + the reader are). The dilemma re-surfaces — and must be
+resolved → mint a new one). The plan-phase carrier may be deleted only at the
+plan's clean step-7 close-out under § 5, never while an entry is open; root marker
+files remain append-only and are never retention targets.
+Inside a review loop the note is ALSO carried in the prompt for reviewer visibility,
+beside PRIOR ROUNDS DISPOSITION when that optional section exists — that carry is
+not the guarantee (the durable record + the reader are). The dilemma re-surfaces — and must be
 resolved — when no independent work remains, and **unconditionally before any review
 loop may terminate** (§ A deferred dilemma blocks termination). This is a temporary
 blocked-dilemma note, NOT an adopt-deferred disposition: a routed review finding still
@@ -568,6 +647,12 @@ actively hunt the named failure modes in the *lens catalogue* below.
   from the docs.
 - **Single-file doc tweaks / small focused edits:** a direct expert invocation is
   sufficient. Spawning a fresh reviewer for a typo costs more than the value.
+
+On either internal path, instruct the reviewer that each finding should carry its
+claim, a stable `Location concept:`, evidence, and remediation. If it omits the
+location concept, the orchestrator normalizes one from the evidence it verifies;
+omission is not a new invalid-output class. External findings already provide the
+equivalent structured field.
 
 Background delegated reviewers where the runtime supports it. Backgrounding
 unblocks the session *within* a round; it does not parallelize rounds, since round
@@ -599,8 +684,9 @@ open only the files needed to confirm or refute it, never browse for inspiration
 and cap reads at the same budget that contract sets, scaled to diff size. On a
 final-confirmation round, narrow the budget to the new delta plus named seams and
 state the rest was already cleared — but this is a *budget* bound, NOT an obligation
-waiver: the round still carries and verifies PRIOR ROUNDS DISPOSITION, so never write
-the absolute "review only the delta." In the same spirit, after a soon-retired surface
+waiver: the round still carries and verifies whatever PRIOR ROUNDS DISPOSITION the
+applicable eligible set yields, so never write the absolute "review only the delta."
+In the same spirit, after a soon-retired surface
 has had its mandatory review, weight subsequent depth toward the durable outputs —
 subject to the same non-waiver sentence above, which this points at rather than
 restating. And depth-weighting is not coverage: a loop that narrows to the newest text
@@ -620,13 +706,21 @@ arms-length brief must include:
    input to* OR *consumes an output of* the modified region. Symmetric: both
    upstream producers and downstream consumers. Bugs cluster at seams because the
    author was thinking inside the modified region.
-3. **Dropped tokens — verified absent.** Before spawning, grep for every emission,
-   path, name, or concept the change *removes or renames*. Paste the (ideally
-   empty) hit list. The reviewer cannot grep for tokens they don't know were
-   dropped — this pre-pass is the orchestrator's job.
+3. **Dropped tokens — verified absent.** Before spawning, search for every emission,
+   path, name, or concept the change *removes or renames*: use a line-based search
+   for a single token, where wrapping cannot matter, and a whitespace-normalized
+   match for a multi-word token. Paste the (ideally empty) hit list. Hard-wrapped
+   prose can split a phrase across lines, so a line-based multi-word search can
+   falsely certify that a stale reference is absent. The reviewer cannot search
+   for tokens it does not know were dropped — this pre-pass is the orchestrator's
+   job.
 4. **Broadened/narrowed sets.** For any concept whose membership the change changes
    ("phases that emit stats went from {2,3,4} to {2,3,3.5,4}"), name the old/new
-   membership. Reviewers cannot grep for set-cardinality drift.
+   membership. Reviewers cannot grep for set-cardinality drift. When this loop's
+   durable class-sweep series is non-empty, also inline the latest complete
+   revision for every distinct live sweep key, including all five fields from
+   § Fix-time class-sweep duty. Record-free paths inline the equivalent in-context
+   facts.
 5. **Path and section-anchor references — verified resolvable.** For every backticked
    relative-path-with-extension and every `§ <heading>` citation in the modified
    region, verify it resolves. When content moves between files, citations rot in
@@ -808,14 +902,17 @@ reviewer runs the reconstruction but omits the attestation — its structured-ou
 schema carries no field for it. A direct narrow-tweak invocation is exempt from
 (e) and runs (a)+(b) only.)*
 
-**For round N > 1**, prepend a **PRIOR ROUNDS DISPOSITION** section between (a) and
-(b), listing each rejection, modification, and adopt-deferred from round N-1 with
-the orchestrator's cited evidence and reasoning (accept and adopt-inline change the
-artifact and are visible directly). Instruct the reviewer verbatim: *"Treat PRIOR
-ROUNDS DISPOSITION entries as claims to verify, not facts. If you read a cited line
-and disagree with the prior disposition, surface it as a finding."* Without this,
-fresh reviewers confirm prior dispositions instead of challenging them, suppressing
-the re-raises the contested-rejection gate depends on.
+When the applicable eligible disposition set is non-empty, prepend a **PRIOR
+ROUNDS DISPOSITION** section between (a) and (b). On round-block paths, derive it
+from § Durable per-topic review state; on machinery-free paths, derive the
+equivalent set from prior logical rounds held in context. Include each eligible
+rejection, modification, and adopt-deferred with the orchestrator's cited evidence
+and reasoning (accept and adopt-inline change the artifact and are visible
+directly). Instruct the reviewer verbatim: *"Treat PRIOR ROUNDS DISPOSITION entries
+as claims to verify, not facts. If you read a cited line and disagree with the
+prior disposition, surface it as a finding."* Without this, fresh reviewers confirm
+prior dispositions instead of challenging them, suppressing the re-raises the
+contested-rejection gate depends on.
 
 **For implementation review after a plan with deferred premises**, add a
 **DEFERRED PREMISES** section: each premise, its named implementation-time check,
@@ -831,11 +928,17 @@ EVENTS record — conditionally only; requiring it on an ordinary round would
 false-fail it. When an open-dilemma note (§ A deferred dilemma blocks termination) is
 live, also confirm the prompt carries it — also conditional; this is reviewer
 visibility, not the drop-prevention guarantee (the durable record + the termination
-reader are).
+reader are). When this loop's durable class-sweep series is non-empty, confirm
+brief item 4 contains one latest-complete revision per distinct live key in that
+loop and all five fields for each.
 
 ### Loop structure
 
 **1. Construct the prompt; run the completeness self-check; spawn the reviewer.**
+First reach the whole-diff/class-sweep fixed point required for this phase. Then
+assemble the prompt from that exact snapshot and, on a path that maintains round
+blocks, append `BEGIN ROUND` naming it. Dispatch only after the BEGIN is durable.
+Inline the latest complete current-loop sweep revisions through brief item 4.
 
 **2. Verify cited evidence (mandatory, per finding — BEFORE evaluating).** Default
 to verifying every finding's cited evidence: for repo/local claims, run
@@ -870,6 +973,10 @@ Verification: <grep/web check run>
 Disposition: accept | reject | modify | adopt-inline | adopt-deferred
 Reasoning: <why, given the verified evidence>
 ```
+
+When this entry is appended inside a durable review-round block, also record
+`Producing arm: internal | external` and `Location concept:`. Do not add those
+review-loop-only fields to the generic template used by consult dispositions.
 
 **3. Evaluate findings critically.** For each finding, using the verified evidence,
 decide:
@@ -913,8 +1020,10 @@ and do not terminate the loop until it is resolved. A bare inability to verify d
 not close it.
 
 Do not auto-apply. The value-add is the delta between the reviewer's advice and
-your final approach. Record each disposition with reasoning in the PRIOR ROUNDS
-DISPOSITION section prepended to the next round's prompt.
+your final approach. Record each disposition with reasoning in the current durable
+round block when that series exists; the next prompt derives PRIOR ROUNDS
+DISPOSITION from the eligible set described in § Durable per-topic review state.
+Machinery-free paths retain the equivalent series in context.
 
 **Delete before repairing.** When the defect a finding reports sits in text *this
 change itself introduced*, ask whether that addition should be deleted before
@@ -949,15 +1058,16 @@ checklist to satisfy jointly:
 *From the series across rounds:*
 - actionable findings declined and then rose again;
 - findings stay flat while the artifact grows every round;
-- findings keep concentrating in **one section** across consecutive rounds — that
-  section is the problem rather than the findings, so reconsider whether it should
-  exist before repairing it again, subject to the adopt-side settled-design floor.
+- a **second consecutive round** concentrates in the **same locality** as the
+  preceding round, measured at one fixed granularity (file, section, or rule).
+  Different localities are ordinary delta-scoped review, not a run. A round wholly
+  concentrated in one locality counts even when it has one finding; a lone finding
+  does not count when the round's other findings sit elsewhere.
 
-These cross-round shapes read the round-by-round series the orchestrator holds while the
-loop runs, so they degrade after a compaction — a deliberate limit, since minting a
-durable record to carry them across one is a larger mechanism than the signal justifies.
-The round-in-hand shapes need nothing beyond the current round, so losing the cross-round
-shapes never suppresses them.
+Completed durable round blocks supply cross-round finding counts and the recorded
+locality/granularity after compaction. An incomplete tail supplies no count or
+locality judgment and breaks locality adjacency. The round-in-hand shapes require
+only the current round.
 
 **The disjunction is load-bearing.** These are disjuncts, not a conjunction: ANDing
 any two can suppress a qualifying shape and make the trip-wire fail to fire. This is
@@ -968,61 +1078,75 @@ a conjunction.
 route through § The unanticipated-problem escalation protocol only when you cannot
 resolve it from the plan, the artifact, or a sensible default — that protocol's own
 entry condition, so a fired shape does not mean a mandatory consult every round.
+For the repeated-locality shape, branch on the locality: delete a dispensable
+section (subject to the adopt-side settled-design floor); when the locality must
+exist, identify the invariant uniting the findings and run § Fix-time class-sweep
+duty; when no invariant or locality-level defect exists, record that diagnostic
+outcome and continue. Concentration alone is evidence to ask the question, not
+proof that a required section is defective.
 
-**When every arm returned no-actionable, an altitude re-scope is not taken
-unilaterally.** There is no arm left to review it — a converged arm drops out
-permanently — so a mutation made then would escape review, and merely declaring the
-round non-terminating would wedge the loop: unable to terminate, with no reviewer
-permitted. Surface the fired shape in the result presented to the user; acting on it
-is a new change with its own loop.
-Do **not** open a dilemma for it — that would block the very termination this branch
-permits, and the signal's consumer is the user, who is being handed the result at
-exactly this moment.
+Every arm's no-actionable result stays provisional until this post-disposition
+locality read finishes. If deletion or a sweep mutates the artifact, the round is
+non-converging for every arm and those arms remain active so the mutation is
+reviewed. A purely diagnostic read or sweep that changes nothing does not block
+convergence.
 
 Report non-blockingly, and report **the size ratio, not the round count** —
 plan-to-change lines at step 5, apparatus vs delivered-behavior lines at step 7. No
 threshold attaches; the ratio is what makes "the solution outgrew the problem"
-checkable rather than a matter of impression. **This adds no new terminator and no
-un-convergence exception:** a converged arm stays permanently retired, and a fired
-shape never licenses leaving a finding undisposed. (Backstop, for the case the branch
-above forbids: if a mutation is applied anyway in a round that would otherwise
-terminate, that round is non-terminating. The two branches leave this unreachable by
-construction — a round terminates only when every arm returned no-actionable, which is
-exactly when the mutation is not taken — so it is stated once, as a floor, not as a
-mechanism.)
+checkable rather than a matter of impression. This read adds no alternate
+terminator and never re-engages an arm that already converged in an earlier round.
 
 **Settle existence before detail.** Settle "should this mechanism exist at all?"
 before spending rounds on its details. This scopes effort *within* the loop and never
 replaces a termination condition.
 
 **Fix-time class-sweep duty.** When an artifact-mutating disposition (accept,
-modify, adopt-inline) reveals a violated invariant, do not fix only the reported
-instance: characterize the invariant by what it violates ("any site enumerating a
-set this change broadens"), sweep for ALL instances — prefer a deterministic grep
-over an eyeball scan — and fix + verify each in the SAME round, recording the
-characterized invariant, the command(s) run, the complete hit list, and the
-per-site verification. Bound the sweep to the same invariant; it is not a license
-to refactor adjacent code.
+modify, adopt-inline), the locality read, or the whole-diff read exposes a violated
+invariant, do not fix only the reported instance:
+
+- characterize the class by the constrained construct and invariant (“any site
+  enumerating a set this change broadens”), not by the wording this change used;
+- choose search terms from that construct—terms drawn only from the change's own
+  prose merely re-find its vocabulary;
+- search both the artifact under review and the target tree, and make the stated
+  command demonstrate that population;
+- fix and verify every hit in the same round, bounded to that invariant.
+
+On a path with a recoverable durable topic binding, append a separate class-sweep
+series to `review-state.md`, with one stable key per characterized invariant in the
+current loop. A complete revision has five fields: the characterized invariant,
+deterministic command(s) and population, complete hit list, sites fixed, and
+per-site verification. Before the first fix, durably append
+`BEGIN SWEEP <key> <revision>` with the stable key, invariant,
+command(s)/population, and complete pre-fix hit list; append sites fixed and
+per-site verification progressively, then the matching `END SWEEP`. An
+interrupted revision identifies recovery work but is never a prompt input: rerun
+the identified sweep against the current artifact and append a fresh complete
+revision before prompt assembly rather than replaying uncertain fixes. A no-change
+refresh may be appended as one complete BEGIN-to-END block. Before the next brief,
+rerun every live key against the current population and append a new complete
+revision under the same key after a pass changes nothing. Audit-sink appends are
+outside that population. Record-free paths keep the same five facts in context.
 
 **4. Draft the next artifact version** incorporating accepted findings and
 modifications.
 
-**5. Repeat from step 1 with the updated artifact AND the carry-forward
-disposition. Stop when the reviewer returns no actionable findings AND no deferred
-dilemma stands open** (§ A deferred dilemma blocks termination) — "no actionable
-findings" defined as no findings the orchestrator accepts, modifies, or adopts-inline.
-Reject-only and adopt-deferred-only rounds terminate the loop (subject to the same
-no-open-dilemma precondition).
+**5. Repeat from step 1 with the updated artifact and whatever PRIOR ROUNDS
+DISPOSITION the applicable eligible set yields.** “No actionable findings” means
+no finding the orchestrator accepts, modifies, or adopts-inline. Whole-loop
+close-out is owned by § Parallel-arm discipline → *Per-arm convergence / loop
+close-out*; this step does not restate or weaken it.
 
-**A round you acted on is not a terminating round.** Termination is *defined* above
-as a round with no accepted / modified / adopt-inline finding — so a round that
-produced one mutated the artifact, and the next reviewer must see the mutation before
-the loop can end. Loops normally run several rounds; stopping right after a round
+**A round you acted on is not a terminating round.** An arm cannot converge on a
+round with an accepted / modified / adopt-inline finding: that disposition mutated
+the artifact, and the next reviewer must see the mutation before the loop can end.
+Loops normally run several rounds; stopping right after a round
 whose findings you applied, reasoning that the change was small or the fix obvious, is
 the premature-stop failure mode, not convergence (the rationalization § The trip-wire
-pattern names). A genuinely clean / reject-only / adopt-deferred-only round still
-terminates — it produced nothing to act on, **and no deferred dilemma stands open
-(§ A deferred dilemma blocks termination).**
+pattern names). A genuinely clean / reject-only / adopt-deferred-only round may
+converge only through the shared per-arm owner after the locality read and,
+where applicable, the complete durable round block.
 
 **A deferred dilemma blocks termination.** A blocked-dilemma note recorded under the
 escalation protocol's defer-and-continue step (§ The unanticipated-problem escalation
@@ -1042,7 +1166,9 @@ record written under that protocol's defer-and-continue step, inspected directly
 same single location the defer step wrote it. (This record shares the durable,
 re-derivable, append-only-closure *discipline* of the § Long-running session
 reliability state note, but is a distinct record with a distinct reader — the
-terminator reads this one; the resume/reconcile path reads that one.)
+terminator reads this one for dilemma openness and the per-topic review state for
+review convergence; the resume/reconcile path reads `.session-state.md`, which is
+never termination evidence.)
 
 **The consult gates review-loop entry.** Symmetric to § A deferred dilemma blocks termination (which
 gates loop *exit*), the mandatory step-3 consult gates loop *entry*: before the **first round of the
@@ -1146,10 +1272,12 @@ direction from the one fresh independence guards.
 disposing or mutating; acting on one arm's findings while the other is still running
 makes the still-running arm's review stale against a pre-edit snapshot. **While both
 arms are active**, dispose both arms' findings together (each via mandatory evidence
-verification — neither authoritative), mutate the artifact ONCE, and iterate. A
-converged arm (internal clean / external reject-only) **drops out permanently and never
-re-engages on any subsequent round**, even though the other arm's disposed findings keep
-mutating the artifact; the still-active arm(s) continue alone to their own convergence.
+verification — neither authoritative), mutate the artifact ONCE, and iterate. An
+arm that returns no-actionable (internal clean / external reject-only) remains
+provisionally active through the post-disposition locality read and converges only
+when that read mutates nothing; it then **drops out permanently and never re-engages
+on any subsequent round**, even though the other arm's disposed findings keep
+mutating the artifact. The still-active arm(s) continue alone to their own convergence.
 Re-running an already-converged arm on the other arm's disposed change is the waste this
 prevents. These two halves are conjunctive — *while both arms are active, dispose
 together and mutate once; once an arm converges it drops permanently* — so "independent
@@ -1157,7 +1285,9 @@ convergence" never licenses disposing one active arm's findings while the other 
 arm is mid-round (that would re-open the stale-snapshot hazard above).
 
 **Per-arm convergence / loop close-out.** Each arm is in one of three states: **active**,
-**converged** (returned no-actionable → dropped out permanently), or
+**converged** (returned no-actionable, the post-disposition locality read mutated
+nothing, and—on a round-block path—the complete round block durably records that
+result → dropped out permanently), or
 **unavailable-skipped** (external unreachable under the skip discipline). The loop
 terminates when **every AVAILABLE arm has converged** — the arms converging
 **independently, not necessarily on the same round** (internal may converge while
@@ -1168,9 +1298,13 @@ terminating condition). With both arms available, the loop terminates only when 
 the internal and external arms have converged; when external is unavailable/skipped, the
 internal arm is the mandatory floor and the loop proceeds **internal-only**, terminating
 when the internal arm alone converges (no waiting on an arm that was never available).
-This per-arm close-out is the **single termination authority** — § Termination — the
-same condition as the internal loop defers to it, and both rest on the base reject-only
-/ adopt-deferred-only terminator (§ The iterative review loop → Loop structure).
+This per-arm close-out is the **single termination authority**. Before closing,
+read both the open-dilemma set and the applicable per-topic review state; an
+incomplete block newer than the newest complete block for an expected arm leaves
+that arm active. Never read
+`.touchstone/.session-state.md` as termination evidence. Machinery-free paths have
+no complete-block prong and use their in-context results. The definition of
+no-actionable remains § The iterative review loop → Loop structure step 5.
 
 **Step-7 accepted tradeoff (single-lens on the final delta).** Step-7 implementation
 review **has no later review backstop** and — unlike the prior model — carries **no
@@ -1334,8 +1468,10 @@ round, inline:
   meant.) Item (a) names the skeleton's (b) only by function and mandates inlining for
   the cold-read text alone, so nothing else carries them, and a prompt that omits them
   silently drops both reviewer-side guards;
-- (d) for round N > 1, the PRIOR ROUNDS DISPOSITION carried forward, with the
-  verbatim "claims to verify, not facts" instruction;
+- (d) when the applicable eligible disposition set is non-empty, PRIOR ROUNDS
+  DISPOSITION carried forward from § Durable per-topic review state (or the
+  machinery-free in-context equivalent), with the verbatim "claims to verify, not
+  facts" instruction;
 - (e) the **search-termination contract**, inlined verbatim:
 
   > **Search-termination contract.** A clean result is a successful result: your
@@ -1358,14 +1494,12 @@ round, inline:
 
 ### Termination — the same condition as the internal loop
 
-An external **arm** converges on a **reject-only** round (no findings the orchestrator
-accepts, modifies, or adopts-inline — the primary terminator). Whole-loop termination is
-governed by the **single authority** in § Parallel-arm discipline → *Per-arm convergence
-/ loop close-out*, which this section defers to: the loop closes when **every available
-arm has converged** (a converged arm drops out permanently) **and no deferred dilemma
-stands open** (§ A deferred dilemma blocks termination). Both the per-arm convergence
-above and that close-out rest on the same base reject-only / adopt-deferred-only
-terminator the internal loop uses (§ The iterative review loop → Loop structure).
+An external **arm** becomes eligible to converge on a **reject-only** round (no
+finding the orchestrator accepts, modifies, or adopts-inline). Actual arm
+convergence and whole-loop termination are governed only by § Parallel-arm
+discipline → *Per-arm convergence / loop close-out*, including its locality,
+durable-block where applicable, all-arms, and open-dilemma prongs. This section
+does not restate that conjunction.
 
 ### Three teeth guard the auto-disposition
 
@@ -1379,11 +1513,15 @@ finding, it can rationalize it away. Three teeth close that:
    *substance* (a real defect at a slightly-stale locator is still valid — re-locate
    it); `inference-disputed:` requires a substantive counter-argument, not
    hand-waving.
-2. **Contested-rejection gate.** If a fresh reviewer **re-raises** a finding the
-   orchestrator rejected in a prior round, it may NOT silently re-reject-and-
-   terminate — it must accept, modify, or route that single finding through the
-   unanticipated-problem escalation protocol. Match on **claim + location-concept**,
-   not raw line integers (line numbers drift between rounds).
+2. **Contested-rejection gate.** If a fresh external reviewer **re-raises** an
+   external-arm finding the orchestrator rejected in a prior round, it may NOT
+   silently re-reject-and-terminate — it must accept, modify, or route that single
+   finding through the unanticipated-problem escalation protocol. Match on
+   **claim + location-concept**,
+   not raw line integers (line numbers drift between rounds). Search every fully
+   populated rejection of an external-arm finding in this topic's durable plan-
+   and implementation-review series, including a later incomplete tail; on a
+   machinery-free path, search the equivalent in-context series.
 3. **Severity-gated hard floor on rejections.** Any **HIGH** rejection (either axis)
    and any **MEDIUM `inference-disputed:`** rejection cannot silently terminate the
    loop — route it through the escalation protocol (consult on that finding's
@@ -1405,11 +1543,11 @@ triggered design-reversal (the tie-break favors gating).
 <!-- SYNC: the health-signal contract here — the non-blocking thresholds (first at review-round 10, then every 5), the review-round-counting exclusions, the whole-review-loop scope, AND the advisory-grounding of the in-memory round-counter reset (signal is advisory → reset changes the advisory signal's timing/visibility only, never correctness/termination; spend unbounded until convergence or interrupt) — is mirrored in TOUCHSTONE-claude.md § External cross-model review — Claude orchestrates, GPT reviews (the Cost note / health-signal pin). Update both together. -->
 **Non-convergence health signal (no hard cap).** The external loop carries **no hard
 round cap**; § Parallel-arm discipline → *Per-arm convergence / loop close-out* remains
-the **sole termination authority** (reject-only / adopt-deferred-only convergence with
-no open dilemma — single-route by design; Touchstone has no plan-review precision
-*exception*, so a future change adding one must update this section explicitly.
+the **sole termination authority**; its full conjunction is not restated here.
+Touchstone has no plan-review precision *exception*, so a future change adding one
+must update this section explicitly.
 Terminable-precision findings are *classified* — they are rejected on the
-remediation-cost ground, which is a disposition, not a route). For
+remediation-cost ground, which is a disposition, not a route. For
 liveness the orchestrator surfaces a **non-blocking** progress summary **first at
 review-round 10, then every 5 review-rounds thereafter** (10, 15, 20, … counted since
 the loop last (re)started) — round count, whether the actionable-finding stream is
@@ -1421,19 +1559,20 @@ redesign) for the first signal and **every 5** for the recurrence. The signal is
 **whole-review-loop scoped** — it fires for internal-only runs too, not just the
 external loop the deleted cap was scoped to. Count **review rounds only** (artifact-review
 rounds that reach disposition) — exclude wrapper retries, config (exit-2) failures, and
-malformed-attestation re-spawns (§ Clean-verdict enforcement — those re-spawns are not
-review rounds and neither reset convergence nor count toward it). The signal fires on rounds **since the loop last (re)started**, NOT a
-durably-cumulative count: `.touchstone/.session-state.md` is command-lifecycle state, not
-review-round accounting (§ Long-running session reliability), so no new durable
-round-counter is minted. The in-memory reset is
+malformed-attestation re-spawns (§ Clean-verdict enforcement) plus delegated-timeout
+replacements (§ Delegated reviewer timeout); those attempts are not review rounds
+and neither reset convergence nor count toward it. The signal fires on rounds **since the loop last (re)started**, NOT a
+durably-cumulative count. `review-state.md` records logical rounds for recovery,
+but neither it nor the command-lifecycle `.touchstone/.session-state.md` is this
+restart-local advisory counter, so no new durable health-signal counter is minted.
+The in-memory reset is
 acceptable because the signal is **non-blocking and advisory** — the local round counter is a
 liveness *cue*, not a counter the loop gates on, a disposition input, or a terminator. Resetting
 it across a restart therefore changes the **advisory signal's timing/visibility only** — never
 convergence criteria, finding dispositions, or automatic termination. By the deliberate
 no-hard-cap choice, external-reviewer spend is **unbounded until convergence or a manual
 interrupt**: termination correctness comes solely from § Parallel-arm discipline → *Per-arm
-convergence / loop close-out* (reject-only / adopt-deferred-only convergence with no open
-dilemma), and spend is bounded only by reaching that convergence or the user choosing to
+convergence / loop close-out*, and spend is bounded only by reaching that convergence or the user choosing to
 interrupt — the periodic summary is liveness visibility, **not** a spend or termination bound.
 The cap's old "safety net" against unbounded subscription-quota spend is thus replaced by this
 increasing-cadence signal plus the user-interrupt affordance; a genuinely diverging loop is the
@@ -1499,32 +1638,33 @@ You do not need the full machinery to use the pattern:
 4.  Draft a plan artifact (a file, not a chat message) for a non-trivial change, and
     record the step-3 consult evidence with it — or, for a planning-skipped change,
     record it in the runtime's fixed consult-evidence fallback and skip from step 5
-    straight to step 11 (there is no plan, so the plan-review steps 6–10 do not apply).
+    straight to step 9 (there is no plan, so the plan-review steps 6–8 do not apply).
 5.  Before the first round of the first review loop the change reaches, confirm
     consult-evidence exists for this change (§ The consult gates review-loop entry);
     if absent, return to step 3.
-6.  Have a fresh internal context review the plan.
-7.  Verify and dispose each finding.
-8.  Repeat until no actionable plan findings remain (and no deferred dilemma stands
-    open — § A deferred dilemma blocks termination).
-9.  Have a different model family review the plan.
-10. Verify and dispose each external finding.
-11. Implement.
-12. Run tests and deterministic checks.
-13. Have a fresh internal context review the implementation diff.
-14. Verify and dispose each finding.
-15. Have a different model family review the implementation diff.
-16. Verify and dispose each external finding.
-17. Report the result, including any skipped review phase or failed validation.
+6.  Have a fresh internal context and, when available, a different model family
+    review the same plan snapshot concurrently.
+7.  Wait for every still-active arm; verify and dispose all returned findings.
+8.  After every logical plan-review round's still-active arms are disposed, run
+    the post-disposition locality read; repeat only the still-active plan-review
+    steps until § Per-arm convergence / loop close-out permits exit.
+9.  Implement.
+10. Run tests and deterministic checks.
+11. Have a fresh internal context and, when available, a different model family
+    review the same implementation snapshot concurrently.
+12. Wait for every still-active arm; verify and dispose all returned findings.
+13. After every logical implementation-review round's still-active arms are
+    disposed, run the post-disposition locality read; repeat only the still-active
+    implementation-review steps until § Per-arm convergence / loop close-out
+    permits exit.
+14. Report the result, including any skipped review phase or failed validation.
 ```
 
-The sequence above is the didactic / internal-only ordering. When a different model
-family is available, the internal and external reviews of the *same* artifact run
-**concurrently while both arms are active** and are disposed together each such round
-(steps 6+9 on the plan, 13+15 on the diff); once an arm converges it drops out
-permanently and the still-active arm(s) continue independently to their own convergence
-— see § External cross-model review (§ Parallel-arm discipline → *Per-arm convergence /
-loop close-out*) for the full rule.
+The compact sequence names both arms at one symmetric review/disposition boundary.
+When no different model family is available, the internal arm is the floor. Once
+an arm converges it drops out permanently and only the still-active arm(s) repeat
+— see § External cross-model review (§ Parallel-arm discipline → *Per-arm
+convergence / loop close-out*) for the full rule.
 
 ## Versioning (when the skill is packaged for release)
 
