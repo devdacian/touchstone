@@ -34,7 +34,11 @@ if [ -n "$out" ]; then
   printf '{"verdict":"no actionable findings","findings":[]}\n' > "$out"
 fi
 
-printf '{"type":"turn.completed","usage":{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0}}\n'
+if [ -n "${CODEX_EVENTS_FILE:-}" ]; then
+  cat "$CODEX_EVENTS_FILE"
+else
+  printf '{"type":"turn.completed","usage":{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0}}\n'
+fi
 FAKE
 chmod +x "$TMP_DIR/codex"
 
@@ -131,6 +135,45 @@ assert_no_capture_match on "$web_disabled"
 
 expect_config_error_without_invocation invalid --web-search maybe
 expect_config_error_without_invocation missing --web-search
+
+# --- structural health: Codex `Reconnecting...` error events are transport notices ---
+COMPLETED='{"type":"turn.completed","usage":{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0}}'
+RECONNECT='{"type":"error","message":"Reconnecting... 2/5 (unexpected status 503 Service Unavailable: upstream connect error)"}'
+
+expect_health() {
+  label="$1"
+  want="$2"
+  events="$TMP_DIR/$label.events"
+  cat > "$events"
+  set +e
+  CODEX_EVENTS_FILE="$events" CODEX_ARGV_CAPTURE="$TMP_DIR/$label.argv" PATH="$TMP_DIR:$PATH" "$WRAPPER" \
+    --prompt "$PROMPT" \
+    --schema "$SCHEMA" \
+    --findings "$TMP_DIR/$label.findings.json" \
+    --log "$TMP_DIR/$label.log" \
+    --cd "$ROOT_DIR" >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -eq "$want" ] || fail "$label: expected exit $want, got $status"
+}
+
+{
+  for n in 2 3 4 5; do
+    printf '{"type":"error","message":"Reconnecting... %s/5 (stream disconnected before completion: idle timeout waiting for websocket)"}\n' "$n"
+  done
+  printf '%s\n' "$COMPLETED"
+} | expect_health reconnects-then-completed 0
+
+printf '%s\n' "$RECONNECT" | expect_health reconnect-without-completion 1
+
+printf '%s\n%s\n%s\n' "$RECONNECT" '{"type":"turn.failed","error":{"message":"boom"}}' "$COMPLETED" \
+  | expect_health reconnect-plus-turn-failed 1
+
+printf '%s\n%s\n' '{"type":"error","message":"model not found"}' "$COMPLETED" \
+  | expect_health other-error-plus-completed 1
+
+printf '%s\n%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"type\":\"error\",\"message\":\"boom\"} turn.failed"}}' "$COMPLETED" \
+  | expect_health error-text-inside-content 0
 
 if grep -R -n -F -- "$stale_exact" "$ROOT_DIR/.touchstone/methodology"; then
   fail "methodology contains stale exact forward web-search config"

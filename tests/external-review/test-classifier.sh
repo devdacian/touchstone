@@ -153,7 +153,7 @@ missing_usage="$(
 assert_json_field "$missing_usage" 'data["classification"] != "reverse_wrapper_post_preflight_auth_transient"' || fail "missing usage classified"
 
 nonempty_model_usage="$(
-  python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); d["modelUsage"]={"claude-opus-5":{"inputTokens":1}}; print(json.dumps({
+  python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); d["modelUsage"]={"claude-opus-5-5":{"inputTokens":1}}; print(json.dumps({
     "runtime":"codex-cli",
     "attempted_wrapper":"external-review-claude.sh",
     "exit_code":1,
@@ -312,8 +312,16 @@ for marker in \
   "unsandboxed repo/diff rerun" \
   "classify_external_review_failure.py"
 do
+  if ! rg -n -F -- "$marker" "$ROOT_DIR/.touchstone/methodology/references/external-review-reverse.md" >/dev/null; then
+    fail "references/external-review-reverse.md missing route-policy marker: $marker"
+  fi
+done
+
+# The core keeps the reverse post-preflight exception in its classifier order and must
+# route orchestrators to the reverse reference.
+for marker in "reverse_wrapper_post_preflight_auth_transient" "references/external-review-reverse.md"; do
   if ! rg -n -F -- "$marker" "$ROOT_DIR/.touchstone/methodology/TOUCHSTONE.md" >/dev/null; then
-    fail "TOUCHSTONE.md missing route-policy marker: $marker"
+    fail "TOUCHSTONE.md missing marker: $marker"
   fi
 done
 
@@ -327,8 +335,10 @@ if ! rg -n -F -- "external-review-claude: AUTH OK" "$ER_DIR/external-review-clau
   fail "reverse wrapper no longer emits the AUTH OK marker the classifier recognizes"
 fi
 
-if rg -n -F -- 'external-review-claude.sh ... 2> "$WRAPPER_STDERR"' "$ROOT_DIR/.touchstone/methodology/TOUCHSTONE.md" >/dev/null; then
-  fail "TOUCHSTONE.md still documents shell redirection as the reverse wrapper stderr source"
-fi
+for doc in TOUCHSTONE.md references/external-review-reverse.md; do
+  if rg -n -F -- 'external-review-claude.sh ... 2> "$WRAPPER_STDERR"' "$ROOT_DIR/.touchstone/methodology/$doc" >/dev/null; then
+    fail "$doc still documents shell redirection as the reverse wrapper stderr source"
+  fi
+done
 
 echo "test-classifier: ok"

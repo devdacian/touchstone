@@ -30,6 +30,12 @@ if [ "$*" = "--setting-sources  auth status --json" ]; then
   printf 'fake auth child stderr\n' >&2
   if [ "${FAKE_CLAUDE_MODE:-success}" = "auth_fail" ]; then
     printf '{"loggedIn":false,"authMethod":"none","apiProvider":"none","subscriptionType":null}\n'
+  elif [ "${FAKE_CLAUDE_MODE:-success}" = "team" ]; then
+    printf '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":"team"}\n'
+  elif [ "${FAKE_CLAUDE_MODE:-success}" = "unknown_sub" ]; then
+    printf '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":"free"}\n'
+  elif [ "${FAKE_CLAUDE_MODE:-success}" = "null_sub" ]; then
+    printf '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":null}\n'
   else
     printf '{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":"max"}\n'
   fi
@@ -43,7 +49,7 @@ if [ "${1:-}" = "-p" ]; then
       printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"usage":{"input_tokens":1,"cache_read_input_tokens":0,"output_tokens":1},"modelUsage":{},"structured_output":{"verdict":"no actionable findings","findings":[]}}\n'
       ;;
     *)
-      printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"usage":{"input_tokens":1,"cache_read_input_tokens":0,"output_tokens":1},"modelUsage":{"claude-opus-5":{"inputTokens":1}},"structured_output":{"verdict":"no actionable findings","findings":[]}}\n'
+      printf '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"usage":{"input_tokens":1,"cache_read_input_tokens":0,"output_tokens":1},"modelUsage":{"claude-opus-5-5":{"inputTokens":1}},"structured_output":{"verdict":"no actionable findings","findings":[]}}\n'
       ;;
   esac
   exit 0
@@ -146,6 +152,17 @@ run_wrapper auth_fail auth_fail
 [ "$(cat "$TMP_DIR/auth_fail.status")" = "3" ] || fail "auth failure did not exit 3"
 assert_file_contains "$TMP_DIR/auth_fail.wrapper-stderr" "external-review-claude: AUTH PREFLIGHT FAILED"
 assert_argv_contains "$TMP_DIR/auth_fail.argv.jsonl" 'len(calls) == 1 and not any("-p" in call for call in calls)'
+
+run_wrapper team team
+[ "$(cat "$TMP_DIR/team.status")" = "0" ] || fail "team subscription did not exit 0"
+assert_file_contains "$TMP_DIR/team.wrapper-stderr" "external-review-claude: AUTH OK"
+assert_argv_contains "$TMP_DIR/team.argv.jsonl" 'any("-p" in call for call in calls)'
+
+for mode in unknown_sub null_sub; do
+  run_wrapper "$mode" "$mode"
+  [ "$(cat "$TMP_DIR/$mode.status")" = "3" ] || fail "$mode did not exit 3"
+  assert_argv_contains "$TMP_DIR/$mode.argv.jsonl" 'len(calls) == 1 and not any("-p" in call for call in calls)'
+done
 
 run_wrapper unhealthy unhealthy
 [ "$(cat "$TMP_DIR/unhealthy.status")" = "1" ] || fail "unhealthy run did not exit 1"

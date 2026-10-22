@@ -47,8 +47,10 @@ plus the two repo-root files that deliver and license it (`install.sh`, `LICENSE
 
 | File | What it is |
 |---|---|
-| `.touchstone/methodology/TOUCHSTONE.md` | The runtime-neutral core: the full process, the failure-mode lens catalogue, the review-prompt skeleton, and the external-review contract — **including the pinned reverse cross-model wrapper**, so it is the COMPLETE process for both a Claude orchestrator and a Codex orchestrator. **Start here.** |
-| `.touchstone/methodology/TOUCHSTONE-claude.md` | The Claude Code binding: how to spawn an arms-length consult/review, and how to drive the cross-model reviewer. (A Codex orchestrator needs no binding file — the core above is self-sufficient for it.) |
+| `.touchstone/methodology/TOUCHSTONE.md` | The runtime-neutral core: the full process, the failure-mode lens catalogue, the review-prompt skeleton, and the runtime-neutral external-review contract. It routes any orchestrator to the references it needs. **Start here.** |
+| `.touchstone/methodology/TOUCHSTONE-claude.md` | The Claude Code binding: how to spawn an arms-length consult/review, the record key formats, and how to drive the forward cross-model reviewer. (A Codex orchestrator needs no binding file.) |
+| `.touchstone/methodology/references/external-review-reverse.md` | The reverse-wrapper contract (Codex orchestrates, Claude reviews): invocation, billing preflight, health, exit codes, and reverse-specific failure recovery. Read on demand before using `external-review-claude.sh`. |
+| `.touchstone/methodology/references/session-retention.md` | The session-artifact retention predicate: when a committed topic's plan, logs and external-review outputs may be retired. Read on demand. |
 | `.touchstone/methodology/references/skill-improvement-strategies.md` | The "what to change" companion: a catalogue of validated strategies for fixing recurring agent-behavior failures (placement, format, structure, multi-agent framing). `TOUCHSTONE.md` tells the agent to read it whenever the task is improving a skill. |
 | `.touchstone/methodology/scripts/external-review/external-review-codex.sh` | Forward wrapper: a Claude orchestrator runs a GPT reviewer via `codex exec`. |
 | `.touchstone/methodology/scripts/external-review/external-review-claude.sh` | Reverse wrapper: a Codex orchestrator runs an Opus reviewer via `claude -p`. |
@@ -192,9 +194,9 @@ work from.
 
    Then add a short pointer to your repo's OWN `CLAUDE.md` (Claude Code) and `AGENTS.md`
    (Codex / OpenCode) — `install.sh` prints exactly what to paste. The pointer tells the
-   agent to read `.touchstone/methodology/TOUCHSTONE.md` — the complete runtime-neutral
-   process, self-sufficient for a Codex orchestrator (it includes the pinned reverse
-   cross-model wrapper) — and, under Claude Code, ALSO
+   agent to read `.touchstone/methodology/TOUCHSTONE.md` — the runtime-neutral process —
+   plus, when orchestrating a Claude reviewer, `references/external-review-reverse.md`,
+   and, under Claude Code, ALSO
    `.touchstone/methodology/TOUCHSTONE-claude.md` (the Claude-specific mechanisms). Your repo
    keeps its own agent files; Touchstone never auto-edits them. Touchstone writes all
    working artifacts — plans, logs, external reviews, marker files — under the ignored part
@@ -224,8 +226,8 @@ work from.
 
    The prompt is the same for either runtime: under **Claude Code** the agent also reads
    the Claude binding (`.touchstone/methodology/TOUCHSTONE-claude.md`) automatically;
-   under **Codex CLI** the runtime-neutral core is self-sufficient on its own (it includes
-   the pinned reverse cross-model wrapper).
+   under **Codex CLI** the core routes the agent to
+   `references/external-review-reverse.md` for the reverse cross-model wrapper.
 
 The internal review loop works with **no extra setup** — it uses your runtime's own
 subagent/delegation mechanism. Cross-model review needs one more thing — the
@@ -258,7 +260,7 @@ the direction that matches your orchestrator:
 
 - Install the **Codex CLI** and authenticate it (a ChatGPT subscription that
   includes Codex quota, or an OpenAI account).
-- The wrapper pins `gpt-5.6-sol` at `high` reasoning effort and scrubs `OPENAI_API_KEY`
+- The wrapper pins `gpt-6.1-sol` at `high` reasoning effort and scrubs `OPENAI_API_KEY`
   so the run stays on the included subscription quota rather than per-token API
   billing.
 - For autonomous Claude Code runs, grant the wrapper in the **gitignored**
@@ -270,15 +272,15 @@ the direction that matches your orchestrator:
 
 ### Codex/GPT orchestrates → Claude reviews (reverse)
 
-- Install **Claude Code** and sign in with a Claude Pro/Max subscription.
+- Install **Claude Code** and sign in with a Claude Pro/Max/Team subscription.
 - The wrapper is **billing-fail-closed**: it scrubs every API/provider/OAuth-token
   env route and invokes the reviewer only when `claude auth status` confirms a
-  first-party `pro`/`max` subscription. If that preflight fails, it exits `3`
+  first-party `pro`/`max`/`team` subscription. If that preflight fails, it exits `3`
   (no-spend skip) and the process proceeds internal-only — it will never silently
   fall back to per-token API billing.
 - Troubleshooting: a one-off `AUTH OK` followed by a zero-usage 401 is not, by itself,
-  evidence that Claude Max auth is permanently broken. Run the smoke probes described in
-  `TOUCHSTONE.md` from a sterile no-repo posture. If they pass, use fresh output paths.
+  evidence that Claude subscription auth is permanently broken. Run the smoke probes described in
+  `references/external-review-reverse.md` from a sterile no-repo posture. If they pass, use fresh output paths.
 - For autonomous Codex runs with `approvals_reviewer = "auto_review"`, approve the exact
   absolute path of `.touchstone/methodology/scripts/external-review/external-review-claude.sh`
   and invoke that wrapper directly as the top-level command. Do not approve `claude`,
@@ -401,7 +403,7 @@ Whether Codex is your orchestrator (reverse path) or just the GPT reviewer (forw
 path), configure non-interactive operation in `~/.codex/config.toml`:
 
 ```toml
-model = "gpt-5.6-sol"
+model = "gpt-6.1-sol"
 model_reasoning_effort = "high"
 
 # Autonomous, with a safety net (the analog of Claude Code's auto mode):
@@ -482,7 +484,13 @@ internal-only (with a logged notice) if the external model is unreachable.
   re-raise match; evidence fields also carry web-source details for web-backed
   findings).
 - **Reviewer models.** Both wrappers take `--model` / `--effort`; the defaults
-  (`gpt-5.6-sol` / `claude-opus-5`, `high`) are sensible starting points.
+  (`gpt-6.1-sol` / `claude-opus-5-5`, `high`) are sensible starting points.
+- **Auto-loading the lenses (Claude Code).** Claude Code auto-loads files under
+  `.claude/rules/**` when you edit matching paths. If you want the lenses to load while
+  editing skill content, extract the lens catalogue and review-prompt skeleton sections of
+  `TOUCHSTONE.md` into a `.claude/rules/skill-review-lenses.md` with path-scoped
+  frontmatter. It is optional, and it adds a two-surface sync burden: keep the two copies
+  aligned.
 
 ## Background
 

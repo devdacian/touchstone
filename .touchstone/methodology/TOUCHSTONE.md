@@ -10,13 +10,13 @@ doing the work.
 It is written for any agentic coding runtime (Claude Code, Codex CLI, OpenCode,
 …). Runtime-specific mechanics — how to spawn a subagent, how to invoke the
 cross-model wrapper — live in the active runtime's notes file when it has one
-(`TOUCHSTONE-claude.md` is the Claude Code binding). A runtime with **no separate
-notes file** (e.g. a Codex CLI orchestrator) is served by this core directly: the
-carve-outs below pin a runtime-neutral default contract sufficient to operate, and
-delegation uses the runtime's own native mechanism. When the phrase "the active
-runtime's subagent/delegation mechanism" appears below, a runtime WITH a notes file
-consults that file for the concrete command; a runtime without one uses its native
-delegation mechanism against the neutral default the core states.
+(`TOUCHSTONE-claude.md` is the Claude Code binding). A runtime with no separate
+notes file (e.g. a Codex CLI orchestrator) is served by this core and the references
+it names, using its own native delegation wherever this core says "the active
+runtime's subagent/delegation mechanism". Any orchestrator reads
+`references/external-review-reverse.md` before its first use of
+`external-review-claude.sh` (the reverse direction — possibly the step-3 external
+consult).
 
 The single load-bearing rule everything else serves:
 
@@ -37,6 +37,8 @@ MUTABLE working artifacts:
   - `.touchstone/methodology/TOUCHSTONE.md` — this core (runtime-neutral process + lenses).
   - `.touchstone/methodology/TOUCHSTONE-claude.md` — the Claude Code runtime binding.
   - `.touchstone/methodology/references/skill-improvement-strategies.md` — the "what to change" companion.
+  - `.touchstone/methodology/references/external-review-reverse.md` — the reverse-wrapper contract (read on demand).
+  - `.touchstone/methodology/references/session-retention.md` — the session-artifact retention predicate (read on demand).
   - `.touchstone/methodology/scripts/external-review/` — the cross-model review wrappers + schema.
   - Touchstone's OWN unit tests for this machinery (the wrappers + classifier) live in the SOURCE
     repo's top-level `tests/` directory — OUTSIDE `.touchstone/methodology/` — and are deliberately
@@ -49,16 +51,15 @@ MUTABLE working artifacts:
     append-only `review-state.md` for review rounds and class sweeps.
   - `.touchstone/ext-review/<topic>/` — external-model review outputs (prompts, findings, logs).
   - `.touchstone/.session-state.md`, `.touchstone/.open-dilemmas.md`,
-    `.touchstone/.consult-evidence.md` — the three single root-level marker files. These
-    three fixed paths are the runtime-neutral default the core relies on; a runtime with a
-    notes file may ELABORATE the in-file record mechanics there, but these paths and the
-    neutral record shapes pinned below (§ A deferred dilemma blocks termination keyed-marker
-    shape; § Long-running session reliability session-state token shape; § The consult gates
-    review-loop entry change-key fields) stand alone and suffice for a runtime without one.
-    They sit at the namespace **root**, not under any retention-deletable subtree.
+    `.touchstone/.consult-evidence.md` — the three single root-level marker files. They sit at
+    the namespace **root**, not under any retention-deletable subtree.
+
+The paths here and the record contracts in § Long-running session reliability, § A deferred
+dilemma blocks termination and § The consult gates review-loop entry are defaults for every
+runtime; a runtime notes file may elaborate key formats and tool bindings.
 
 This split is a **retention safety** structure, not a convenience: session-artifact
-retention (§ Long-running session reliability) deletes ONLY the named per-topic subtrees —
+retention (`references/session-retention.md`) deletes ONLY the named per-topic subtrees —
 `plans/<topic>-plan.md`, `logs/<topic>/`, `ext-review/<topic>/`. It MUST NOT target
 `.touchstone/*` or `.touchstone/methodology/`: the machinery and the root markers are
 never cleanup candidates, so a careless wildcard or a slug collision can never nuke the
@@ -67,10 +68,9 @@ default here, update the paths above, and update the host `.gitignore` block, to
 
 `<topic>` is one canonical slug per change (the `<topic>` in `<topic>-plan.md`), used
 identically across all artifact sites and the session-state record. Installing Touchstone
-copies the single `.touchstone/methodology/` directory into the host (the `install.sh`
-SAFE contents-copy, or by hand). By default the host then **commits the vendored
-methodology and ignores only the mutable artifacts** — the same model this source repo
-uses — so its `.gitignore` carries the two-line negation block (in this order):
+copies the single `.touchstone/methodology/` directory into the host. By default the host
+**commits the vendored methodology and ignores only the mutable artifacts**, so its
+`.gitignore` carries this two-line negation block (in this order):
 
 ```
 /.touchstone/*
@@ -79,21 +79,11 @@ uses — so its `.gitignore` carries the two-line negation block (in this order)
 
 The first line ignores everything under `.touchstone/`; the second re-includes the
 machinery directory so a fresh checkout of the host has Touchstone ready for
-contributors. `install.sh` idempotently writes that block (an ignore rule, not an agent
-file — and `--ignore-all` opts back into a blanket `/.touchstone/` for a host that does
-not want to vendor), or a by-hand installer adds it as a documented copy-in step. After
-install the host commits the result (`git add .gitignore .touchstone/methodology && git
-commit`) — the installer never stages or commits. Touchstone never auto-edits a host's
-**agent** files (`CLAUDE.md`/`AGENTS.md`): the installer only PRINTS those stanzas for
-the host to paste.
-
-**Upgrading (vendor bump).** Because the methodology is committed, pulling a newer
-Touchstone is a tracked bump: re-run `install.sh <host> --force` to replace
-`.touchstone/methodology/`, review the change with `git diff .touchstone/methodology`,
-then `git add .gitignore .touchstone/methodology && git commit`. `--force` refuses if the
-host's `.touchstone/methodology/` has uncommitted local changes (commit or stash them
-first, or pass `--discard-local` to overwrite them); the installer never stages or commits
-the bump for you.
+contributors. Touchstone never auto-edits a host's **agent** files (`CLAUDE.md`/`AGENTS.md`):
+the installer only PRINTS those stanzas for the host to paste. A vendor bump is
+`install.sh <host> --force`, then review `git diff .touchstone/methodology` before committing;
+the installer never stages or commits. Its flag details (`--discard-local`, `--ignore-all`,
+when `--force` refuses) live in Touchstone's source README, which is not vendored.
 
 ## Why this exists
 
@@ -256,6 +246,9 @@ external-review activity, and the per-topic output directory must exist before i
 For consults that may rest on current external facts, pass the wrapper's
 web-search opt-in when available; the wrapper default is off, but consults are
 one-shot premise checks where authoritative current sources are often the point.
+Encode the external consult's recommendations in the findings schema: the headline in
+`claim`, the concrete change in `suggested_fix`, and schema-valid placeholders such as
+`n/a` in review fields that do not apply.
 
 ### 4. Evaluate critically; do NOT auto-implement
 
@@ -377,42 +370,27 @@ discipline targets work that can strand or duplicate, not every `grep`.)
   Preserve the command's real exit status; never treat a truncated transcript as
   the source of truth. Persist only redacted streams when output or command
   metadata may carry secrets.
-- **Checkpoint command lifecycle.** Keep a small state note recording, per
-  in-flight command, a `dispatched`→terminal transition plus a liveness marker
-  (start time / process or session id). Write `dispatched` before the command can
-  run; write a terminal marker (with exit status, when known) after. On resume, a
-  non-idempotent command that is *dispatched with no terminal marker* must be
-  **reconciled, not blindly rerun** — confirm its effects didn't already land and no
-  live process remains first. Reconcile has **three outcomes, not two**: effects
-  confirmed → a terminal marker; effects **unconfirmable** → a NON-terminal
-  "needs-resolution" marker that keeps the command in-flight AND an escalation (open a
-  keyed deferred dilemma, § A deferred dilemma blocks termination). Never force an
-  unconfirmable command to a terminal marker — that silently drops a non-idempotent
-  command — and never blindly rerun it; the needs-resolution marker is retired to a
-  terminal marker only once that dilemma is disposed. *Keying requirement:* each
-  checkpointed command carries a **stable distinctive identifier**; each TERMINAL
-  marker (`completed`, or a no-exit-status terminal equivalent recorded once the
-  command's effects are confirmed/disposed) repeats that identifier verbatim; a
-  command whose effects cannot yet be confirmed carries the NON-terminal
-  needs-resolution marker, which keeps its identifier in the in-flight set until a
-  resume writes a terminal marker for it (or it is escalated and later disposed); the
-  **in-flight set = dispatched identifiers minus TERMINAL identifiers** (the same
-  shape as the open-dilemma record's neutral keying requirement, § A deferred dilemma
-  blocks termination). A reconcile outcome may direct a **re-run** of the stuck command
-  under a *fresh* replacement identifier; the replacement is a new obligation with its
-  own lifecycle, and retiring the original points to it. Whenever a terminal marker
-  retires an obligation by pointing to such a replacement, the replacement's
-  `dispatched` marker must be durable *before* the original is made terminal — so a
-  crash between the two appends leaves the original still in-flight (safe-fail), never
-  retired-without-a-live-replacement. The runtime-neutral default the core pins: the state note
-  is the fixed root-level **`.touchstone/.session-state.md`** marker file (§ Configuration), each
-  command keyed by a stable distinctive identifier, carrying a `dispatched` marker plus exactly
-  one terminal marker — `completed` (exit status known) or `reconciled` (effects confirmed/disposed)
-  — or the non-terminal `reconcile-pending` (alias for the needs-resolution marker above) while
-  effects are unconfirmed, with the **in-flight set = dispatched identifiers minus terminal
-  (`completed` ∪ `reconciled`) identifiers**. That token shape + set math suffices for a runtime
-  without its own notes file; a runtime WITH a notes file may ELABORATE the concrete key format
-  and the runtime-tool dispatch/completion handles there, but the neutral default stands alone.
+- **Checkpoint command lifecycle.** Keep the state note — the fixed root-level
+  **`.touchstone/.session-state.md`**, append-only (never edited, erased or reset; a fresh run
+  appends new keys, and earlier entries stay, inert once terminal). Each in-flight command
+  carries a **stable distinctive identifier**, a liveness marker (start time / process or
+  session id), a `dispatched` marker written before the command can run, and then exactly one
+  terminal marker repeating that identifier verbatim: `completed` (exit status known) or
+  `reconciled` (effects confirmed/disposed). The **in-flight set = dispatched identifiers minus
+  terminal (`completed` ∪ `reconciled`) identifiers**. On resume, a non-idempotent command that
+  is dispatched with no terminal marker must be **reconciled, not blindly rerun** — confirm its
+  effects didn't already land and no live process remains first. Reconcile has **three
+  outcomes, not two**: effects confirmed → a terminal marker; effects **unconfirmable** → the
+  NON-terminal `reconcile-pending` marker, which keeps the command in-flight, AND an escalation
+  (open a keyed deferred dilemma, § A deferred dilemma blocks termination). Never force an
+  unconfirmable command to a terminal marker — that silently drops a non-idempotent command —
+  and never blindly rerun it; `reconcile-pending` is retired to a terminal marker only once that
+  dilemma is disposed. A reconcile outcome may direct a **re-run** under a *fresh* identifier:
+  the replacement is a new obligation with its own lifecycle and never retires the original —
+  only the original's own terminal marker does, pointing to the replacement. The replacement's
+  `dispatched` marker must be durable *before* the original is made terminal, so a crash
+  between the two appends leaves the original still in-flight (safe-fail), never
+  retired-without-a-live-replacement.
 - **Summarize from durable artifacts.** Summarize large output by reading the saved
   log with bounded commands — exit status and artifact paths — not from memory of
   the scrolled-past transcript.
@@ -431,15 +409,13 @@ discipline targets work that can strand or duplicate, not every `grep`.)
   background task. (A main-loop transport error happens while the orchestrator is
   not generating, so it cannot self-retry it — that recovery is the runtime
   client's job; the durable note is what makes a manual restart safe.) The
-  deferred-dilemma note (§ A deferred dilemma blocks termination) reuses this
-  checkpoint *discipline* — a durable, re-derivable, append-only record whose
-  resolution marker is the analogue of a **terminal** command marker — but is a
-  **separate record with a separate lifecycle**: a command checkpoint goes inert only
-  once terminal, whereas a dilemma entry blocks loop termination until resolved. (The
-  two records also meet at one bridge: a command whose effects are unconfirmable stays
-  in a non-terminal needs-resolution state — live exactly like an open dilemma — and is
-  escalated AS a deferred dilemma, retiring to a terminal marker only once that dilemma
-  is disposed.)
+  deferred-dilemma record (§ A deferred dilemma blocks termination) shares this
+  discipline — durable, re-derivable, append-only, its resolution marker the analogue of
+  a terminal marker — but is a **separate record with a separate lifecycle**: a command
+  checkpoint goes inert once terminal, whereas an open dilemma blocks loop termination.
+  The two meet at one bridge: an unconfirmable command stays `reconcile-pending` — live
+  like an open dilemma — and is escalated as one, retiring only once that dilemma is
+  disposed.
 - **Durable per-topic review state.** A full-process change with a recoverable
   canonical topic binding keeps one append-only
   `.touchstone/logs/<topic>/review-state.md`. Before its first keyed append, create
@@ -501,39 +477,10 @@ discipline targets work that can strand or duplicate, not every `grep`.)
   blocks. If such a direct-only path also has no plan/consult topic binding, it
   does not mint a topic record solely for review bookkeeping.
 - **Session-artifact retention (bounded growth).** A completed session's working
-  artifacts under the artifact root (§ Configuration) — its `<topic>` plan, its
-  `logs/<topic>/`, its `ext-review/<topic>/` — otherwise accumulate without bound over a
-  checkout's life. Retire them under a fail-closed safety predicate, as a pass **distinct
-  from** the plan-delete-on-clean-step-7 gate (which fires before the deliverable is
-  committed). The predicate has TWO modes:
-  - **Same-session self-clean** (runs only AFTER the user has committed the deliverable):
-    delete this session's `<topic>` plan / `logs/<topic>/` / `ext-review/<topic>/` when ALL
-    hold — (1) **durable**: the deliverable's actual commit exists in history (not merely a
-    clean tree) AND (no upstream configured, OR pushed to upstream) — when no remote exists
-    "committed" is the strongest available durability and is the correct bar; (2) the
-    dilemma open-set is empty (§ A deferred dilemma blocks termination); (3) the command
-    in-flight set is empty; and (4) review close-out is proven under the path's
-    review regime. On a round-block path, the topic's implementation-review state
-    has no newer incomplete tail and its newest complete block records every
-    expected arm converged or unavailable-skipped. In a still-live machinery-free
-    same session, use the equivalent in-context clean-close-out proof. After a
-    restart that lost record-free facts, or on any ambiguity, fail closed. No
-    content-age term: the durable record is the committed change,
-    not the gitignored logs.
-  - **Cross-session backlog sweep**: a later session may retire a PRIOR topic's artefacts,
-    but a prior topic's open-set/in-flight markers no longer exist to evaluate guards (2)/(3),
-    so this mode uses the weaker predicate — the topic is not the current live session AND has
-    an identifiable committed deliverable — and only ever **PROPOSES** a delete set for user
-    go/no-go, never auto-deletes (deletion of gitignored artefacts is unrecoverable). Fail
-    closed on any uncertainty (retain).
-  Retention **never resets or truncates** the marker files: the state/dilemma records are
-  append-only and already inert once all their keys are terminal (a fresh run appends its own
-  run id), and the consult-evidence record is a survival record a later phase still reads.
-  The retention pass READS the command + dilemma families only to gate a delete and writes no
-  marker. It reads them at the three fixed marker paths (§ Configuration), via the neutral
-  record shapes pinned in this core; a runtime with a notes file may ELABORATE the concrete
-  key formats and the reader-disjointness reconciliation there, but the neutral default the
-  core states suffices for a runtime without one.
+  artifacts — its `<topic>` plan, `logs/<topic>/` and `ext-review/<topic>/` — otherwise
+  accumulate without bound. After the user commits the deliverable, or when a later session
+  finds a prior topic's artifacts, retire them per `references/session-retention.md`
+  (proposal-only across sessions); never retire without reading it.
 
 **Bounded tool-retry (any orchestrator-invoked tool).** When a tool the
 orchestrator *itself* invokes — a delegated reviewer, the external-review wrapper,
@@ -576,53 +523,14 @@ your final call. (3) **Defer and continue if the dilemma is separable** — if i
 still undecidable after the consult and your analysis, AND it is *not a review finding
 routed here for disposition* (a routed finding is never separable — the loop cannot
 terminate with a finding undisposed), AND no other pending work depends on resolving
-it, then record the open question — **a stable dilemma key** (minted now per the runtime's
-key-minting rule, recorded verbatim, unique among all keys already in the run's record),
-the consult's findings, your candidate options, and the condition that will force the
-decision — as a **durable open-dilemma note**, and continue that independent work. The note must live somewhere the termination
-reader (§ A deferred dilemma blocks termination) can inspect *directly*: in plan-phase,
-as an open-dilemma entry in the plan file (which is mutated each round); in
-implementation-phase or any phase with no live plan file, in a durable append-only
-open-dilemma record on disk (the deferred-improvements file is the shape precedent,
-distinct in content) — **one consistent, discoverable per-run location** the
-defer-step writer and the termination reader both use, so the reader — including a
-*fresh or resumed* terminator that did not itself write the note — inspects the same
-record that was written. This runtime-neutral core states only the *requirement*: the
-location must be **re-derivable by any terminator from the run's durable artifacts**
-(the plan file, the artifact under review, the working directory) WITHOUT the writer's
-in-memory state, so a session that resumes after the writer's context is gone can still
-find an open record and be blocked by it. The runtime-neutral default the core pins is the
-fixed root-level **`.touchstone/.open-dilemmas.md`** marker file (§ Configuration), holding
-keyed `OPEN <key>:` / `RESOLVED <key>:` markers per the open/RESOLVED keyed-marker shape this
-section defines — a single conventional path a terminator always checks, sufficient for a
-runtime without its own notes file. A runtime WITH a notes file may ELABORATE the concrete
-discovery rule there (the same way it elaborates the subagent and external-review mechanisms),
-but the neutral default stands alone. In plan-phase the open-dilemma entry instead lives in
-the plan file the terminator already reads. Its lifecycle is — *write* the entry here on defer; *read* it at
-every terminator; *clear* it when the dilemma receives a real disposition (on an
-append-only record, "clear" means append a resolution marker so the reader counts the
-entry as closed — closure is *recorded*, not erased). Because a run may defer more than one
-separable dilemma into the same append-only record, each entry carries a **stable dilemma
-key** fixed at *write* time and recorded verbatim in the entry, and the resolution marker
-repeats that key verbatim; the reader and the delete gate therefore test *open-ness, not
-mere presence* — computed as the **set difference: the recorded dilemma keys MINUS the
-resolved keys** — so a run holding several deferred dilemmas can tell exactly which remain
-open and a single unkeyed marker can never ambiguously close the whole record. "Stable"
-means *durable in the record and unique among all keys recorded in the run* (open or
-already-resolved) — the terminator READS the key off the durable record, never recomputing
-one from the dilemma's mutable prose. A key names one obligation *instance*: a still-open
-dilemma re-deferred keeps its key (no duplicate open entry), but a dilemma resolved and
-later re-raised is a new instance with a new key, so a stale resolution marker can never
-close it; the writer tells the two apart by checking whether the entry's current key
-already has a matching resolution in the record (still open → keep the key; already
-resolved → mint a new one). The plan-phase carrier may be deleted only at the
-plan's clean step-7 close-out under § 5, never while an entry is open; root marker
-files remain append-only and are never retention targets.
-Inside a review loop the note is ALSO carried in the prompt for reviewer visibility,
-beside PRIOR ROUNDS DISPOSITION when that optional section exists — that carry is
-not the guarantee (the durable record + the reader are). The dilemma re-surfaces — and must be
-resolved — when no independent work remains, and **unconditionally before any review
-loop may terminate** (§ A deferred dilemma blocks termination). This is a temporary
+it, then record the open question — a stable dilemma key, the consult's findings, your
+candidate options, and the condition that will force the decision — as a **durable
+open-dilemma entry** in the record § A deferred dilemma blocks termination defines, and
+continue that independent work. Inside a review loop the entry is ALSO carried in the
+prompt for reviewer visibility, beside PRIOR ROUNDS DISPOSITION when that optional
+section exists — that carry is not the guarantee (the durable record + the reader are).
+The dilemma re-surfaces — and must be resolved — when no independent work remains, and
+**unconditionally before any review loop may terminate**. This is a temporary
 blocked-dilemma note, NOT an adopt-deferred disposition: a routed review finding still
 needs a real disposition before the loop can terminate. (4) **Ask the user** only when the dilemma blocks all remaining safe
 progress — bringing the consult's findings and your analysis, not a cold question. The
@@ -711,7 +619,10 @@ arms-length brief must include:
    for a single token, where wrapping cannot matter, and a whitespace-normalized
    match for a multi-word token. Paste the (ideally empty) hit list. Hard-wrapped
    prose can split a phrase across lines, so a line-based multi-word search can
-   falsely certify that a stale reference is absent. The reviewer cannot search
+   falsely certify that a stale reference is absent. An empty hit list is also a claim
+   about the command: before trusting a zero, run the identical search (same scope,
+   aliases, filters) on a token known to be present and confirm it returns, and apply
+   directory exclusions to paths, never to whole matched lines. The reviewer cannot search
    for tokens it does not know were dropped — this pre-pass is the orchestrator's
    job.
 4. **Broadened/narrowed sets.** For any concept whose membership the change changes
@@ -819,7 +730,11 @@ lens applied to the wrong region).
     past it. The state in front of you is not evidence about another one; where you
     cannot determine which revision the claim is about, or cannot reach that
     revision, report the premise as unresolved rather than substituting what you
-    can reach.
+    can reach. Hold your own failure-mode findings to the same bar: before filing a
+    defect that needs a hypothesized state, sequence, or caller, establish and name
+    the path the system admits; where you cannot but the concern is real, file the
+    unestablished reachability itself rather than upgrading it into a proven-defect
+    claim.
 
 18. **Altitude / proportionality.** Every other lens asks *is this correct?*; this one
     asks *should this exist, and is it the right size?* Both directions are findings: a
@@ -954,8 +869,14 @@ and that the quoted substance is present or materially represented at the cited 
 Paste the command/check and result into the disposition entry's `Verification`
 field. The only valid opt-out is a finding with no code-level or external factual
 claim ("this prose is unclear", a pure design proposal) — record
-`Verification: N/A — no code-level or external factual claim`. "I already verified
-similar things this session" and "the claim looks plausible" are NOT valid
+`Verification: N/A — no code-level or external factual claim`. A finding whose
+defect needs a hypothesized state, sequence, or caller does not qualify: it claims the
+system admits that path. Verify it — name the entry point and the path that reaches it —
+or cite the stated invariant (a code-enforced precondition, a gate, a documented rule)
+that forbids it and reject `inference-disputed:`, with the existing arm-specific teeth
+unchanged. "Never observed" or "unlikely" is not an invariant: where no forbidding
+invariant is cited, the scenario is live and the finding takes an ordinary disposition.
+"I already verified similar things this session" and "the claim looks plausible" are NOT valid
 opt-outs; plausibility is exactly what gets weaponized by overstated risks. Treat
 differing citations (reviewer's evidence cites file X, modified region documents
 script Y) as a red flag — verify both endpoints resolve to the same code path
@@ -1001,8 +922,10 @@ decide:
   to a deferred-improvements file for later work.
 
 **The reject licences record their basis.** A rejection under component (b)'s
-mechanism-admission burden or on terminable-precision grounds records that basis —
-and, for a precision rejection, the two-prong verification — in `Reasoning`. § Three
+mechanism-admission burden, on terminable-precision grounds, or on a cited forbidding
+invariant (step 2's reachability rule) records that basis — for a precision rejection
+the two-prong verification, for a reachability rejection the invariant's file:line and
+quote — in `Reasoning`. § Three
 teeth reaches only the external arm, so on the internal arm this record is the sole
 audit surface these rejections have; it has to exist rather than be assumed. (Step
 4's consult-side rejections carry the same requirement in their own section.)
@@ -1109,17 +1032,21 @@ invariant, do not fix only the reported instance:
   enumerating a set this change broadens”), not by the wording this change used;
 - choose search terms from that construct—terms drawn only from the change's own
   prose merely re-find its vocabulary;
-- search both the artifact under review and the target tree, and make the stated
-  command demonstrate that population;
+- search both the artifact under review and the target tree, and prove the command
+  sees the class: before reading its output, name from the construct a known member in
+  the class's dominant surface form, distinct from the site that prompted the sweep, and
+  show the command hits it — or state why the class has only one surface form; rerun
+  that control whenever the command changes;
 - fix and verify every hit in the same round, bounded to that invariant.
 
 On a path with a recoverable durable topic binding, append a separate class-sweep
 series to `review-state.md`, with one stable key per characterized invariant in the
 current loop. A complete revision has five fields: the characterized invariant,
-deterministic command(s) and population, complete hit list, sites fixed, and
-per-site verification. Before the first fix, durably append
+command(s)/population/positive control, complete hit list, sites fixed, and per-site
+verification. Before the first fix, durably append
 `BEGIN SWEEP <key> <revision>` with the stable key, invariant,
-command(s)/population, and complete pre-fix hit list; append sites fixed and
+command(s)/population with its positive control and the control's hit, and complete
+pre-fix hit list; append sites fixed and
 per-site verification progressively, then the matching `END SWEEP`. An
 interrupted revision identifies recovery work but is never a prompt input: rerun
 the identified sweep against the current artifact and append a fresh complete
@@ -1148,27 +1075,42 @@ pattern names). A genuinely clean / reject-only / adopt-deferred-only round may
 converge only through the shared per-arm owner after the locality read and,
 where applicable, the complete durable round block.
 
-**A deferred dilemma blocks termination.** A blocked-dilemma note recorded under the
+**A deferred dilemma blocks termination.** A blocked-dilemma entry recorded under the
 escalation protocol's defer-and-continue step (§ The unanticipated-problem escalation
 protocol) is an open obligation, not a disposition: the review loop may not reach a
 terminating round (clean, reject-only, or adopt-deferred-only) while one stands open,
 exactly as it may not terminate with a review finding undisposed. The *subject* is any
 deferred dilemma, not only a finding — non-finding entrants route through the same
 protocol (e.g. the repeated malformed clean-verdict output § Clean-verdict
-enforcement). **Before treating any round as terminating, verify the open set is empty — i.e. every
-dilemma key recorded under that step has a matching resolution marker (recorded keys MINUS
-resolved keys = ∅), counting only open entries that lack a resolution** — that check is the
-invariant's reader;
-without it the rule has no enforcement point. "When no independent work remains"
-(§ The unanticipated-problem escalation protocol) is the *soft* wake-up; this is the
-*hard* floor — the loop cannot end first. The note lives in the durable open-dilemma
-record written under that protocol's defer-and-continue step, inspected directly at the
-same single location the defer step wrote it. (This record shares the durable,
-re-derivable, append-only-closure *discipline* of the § Long-running session
-reliability state note, but is a distinct record with a distinct reader — the
-terminator reads this one for dilemma openness and the per-topic review state for
-review convergence; the resume/reconcile path reads `.session-state.md`, which is
-never termination evidence.)
+enforcement). "When no independent work remains" is the *soft* wake-up; this is the
+*hard* floor — the loop cannot end first.
+
+*The record.* Its location must be **re-derivable by any terminator from the run's durable
+artifacts** (the plan file, the artifact under review, the working directory) WITHOUT the
+writer's in-memory state, so a fresh or resumed terminator finds an open entry and is
+blocked by it: in plan-phase, an entry in the plan file (which the terminator already
+reads); otherwise the fixed root-level **`.touchstone/.open-dilemmas.md`** (§ Configuration).
+Both homes use append-only line markers: the defer step *writes* `OPEN <key>: …`; a real
+disposition *clears* it by appending `RESOLVED <key>: …` — closure is recorded, not erased.
+Each entry's **stable dilemma key** is fixed at write time, recorded verbatim, and unique
+among all keys in the record (open or already resolved); the resolution marker repeats it
+verbatim, and the reader reads keys off the record, never recomputing them from the
+dilemma's mutable prose. A key names one obligation *instance*: a still-open dilemma
+re-deferred keeps its key (no duplicate open entry), but one resolved and later re-raised
+gets a new key, so a stale resolution can never close it — the writer tells them apart by
+checking whether the current key already has a matching resolution. The plan-phase carrier
+may be deleted only at the plan's clean step-7 close-out under § 5, never while an entry is
+open; root marker files remain append-only and are never retention targets.
+
+*The reader.* **Before treating any round as terminating, verify the open set is empty —
+recorded keys MINUS resolved keys = ∅, counting only open entries that lack a
+resolution** — so a run holding several deferred dilemmas can tell exactly which remain
+open, and a single unkeyed marker can never close the whole record. That check is the
+invariant's enforcement point. (This record shares the durable, append-only-closure
+*discipline* of the § Long-running session reliability state note but is a distinct
+record with a distinct reader — the terminator reads this one for dilemma openness and the
+per-topic review state for review convergence; the resume/reconcile path reads
+`.session-state.md`, which is never termination evidence.)
 
 **The consult gates review-loop entry.** Symmetric to § A deferred dilemma blocks termination (which
 gates loop *exit*), the mandatory step-3 consult gates loop *entry*: before the **first round of the
@@ -1193,15 +1135,13 @@ the gate's **scope bound** does the filtering — not the presence or absence of
 implemented change reaches step-7's review loop, the step-7 reader must check **scope first**: (1) is this
 a change in the class step 3 governs? If no, the gate does not apply — proceed (a typo or mechanical fix
 is never gated, even though it reaches step 7). (2) If yes, require the consult-evidence record and fail
-closed on its absence. The runtime-neutral default the core pins: a *planned* change records the
-evidence in a `## Consult evidence` section of the plan file (the artifact the reader already opens);
+closed on its absence. A *planned* change records the evidence in a `## Consult evidence` section of
+the plan file (the artifact the reader already opens);
 a planning-skipped change records it as one keyed entry in the fixed root-level
 **`.touchstone/.consult-evidence.md`** marker file (§ Configuration), keyed by the change's topic slug.
 Either way the entry carries three change-key fields — the **internal** consult's identity + a resolvable
 pointer to its advice, the **external** arm's findings path (or its logged `SKIPPED` notice), and the
-**step-4 disposition** pointer proving the advice was evaluated. That default suffices for a runtime
-without its own notes file; a runtime WITH a notes file may ELABORATE the concrete shape there (as with
-the open-dilemma and session-state records), but the neutral default stands alone.
+**step-4 disposition** pointer proving the advice was evaluated.
 
 **Clean-verdict enforcement (arms-length internal reviewers only).** Before a clean /
 reject-only verdict from an arms-length internal reviewer can terminate the loop,
@@ -1232,20 +1172,13 @@ unavailable, the internal loop runs alone.
 
 **Runtime-concretes carve-out.** The runtime-specific concretes of cross-model review
 — which model family orchestrates and which reviews, and the concrete handles that
-maintain the durable records — live in the active runtime's notes file, EXCEPT where a
-runtime has no separate notes file. In that case this core provides a runtime-NEUTRAL
-default contract sufficient to operate: the reverse-wrapper contract pinned in § The
-reverse direction below, and the neutral marker-record shapes pinned with the three fixed
-marker paths (§ Configuration; § A deferred dilemma blocks termination; § Long-running
-session reliability; § The consult gates review-loop entry). A runtime WITH a notes file
-may ELABORATE its own concretes there, but each neutral default stated in this core stands
-alone — a runtime without its own notes file (a Codex CLI orchestrator) operates from the
-core plus this carve-out plus its native delegation mechanism. The two directions are
-asymmetric on purpose: the FORWARD concrete invocation (the orchestrator's own model
-reviewing via a different family) is the active runtime's concrete and lives in its notes
-file when it has one, whereas the REVERSE wrapper's concrete contract is pinned here in the
-core — because the runtime it serves (Codex orchestrating a Claude reviewer) has no notes
-file of its own.
+maintain the durable records — live in the active runtime's notes file (a runtime without one
+uses the § Configuration defaults). The FORWARD
+invocation (the orchestrator's own model reviewing via a different family) is the active
+runtime's concrete. The REVERSE wrapper's contract — Codex orchestrating a Claude reviewer,
+a runtime with no notes file of its own — is core-owned but lives in
+`references/external-review-reverse.md`: read it before assembling or invoking
+`external-review-claude.sh`, and before classifying an unhealthy reverse round.
 
 The external reviewer shares none of the orchestrator's context or rationale —
 the strongest form of the fresh-reviewer-unfamiliarity principle. A
@@ -1306,22 +1239,14 @@ that arm active. Never read
 no complete-block prong and use their in-context results. The definition of
 no-actionable remains § The iterative review loop → Loop structure step 5.
 
-**Step-7 accepted tradeoff (single-lens on the final delta).** Step-7 implementation
-review **has no later review backstop** and — unlike the prior model — carries **no
-final-snapshot guard**: a converged arm is permanently retired and is NOT re-engaged to
-re-confirm the final diff. The accepted consequence, stated honestly: the last
-orchestrator-authored mutation(s) are reviewed by the **still-active arm(s) plus the
-deterministic gates / tests / class-sweeps only** — single-lens, not cross-lens, on that
-final delta (in internal-only mode there is no *second* arm; the single internal arm's
-own next-round fresh reviewer reviews the final mutation, the normal loop). Accepted
-because (a) it is a *disposed* mutation — the orchestrator's reasoned disposition of a
-finding, not raw author code — and (b) the marginal cross-lens value of re-engaging a
-retired arm did not justify the operational confusion the prior guard caused
-(orchestrators misread it as "keep the converged arm running every round"). This is a
-bounded, accepted single-lens tradeoff — NOT "near-zero coverage", and the internal arm
-is not "the weakest reviewer". (At step-5 no guard was ever needed: step-5 plan content
-is re-examined downstream at step-7, where both arms run fresh against the
-implementation.)
+**Step-7 accepted tradeoff (single-lens on the final delta).** Step 7 has no later review
+backstop, and a converged arm is not re-engaged to re-confirm the final diff, so the last
+orchestrator-authored mutations are reviewed only by the still-active arm(s) plus
+deterministic gates, tests, and class sweeps (internal-only: the internal arm's next fresh
+reviewer). Accepted because those mutations are reasoned dispositions, not raw author code,
+and a final-snapshot re-run leads orchestrators to keep converged arms running every round —
+do not add one. Step 5 needs no such guard: step 7 re-examines plan content with both arms
+fresh.
 
 **Output-directory precondition.** Before **anything is written under
 `.touchstone/ext-review/<topic>/` for a run** — i.e. before assembling the external-review
@@ -1331,66 +1256,17 @@ it holds the prompt as well as the findings and log). This applies in **both dir
 forward wrapper `.touchstone/methodology/scripts/external-review/external-review-codex.sh` (the orchestrator's model reviewing
 via a different family) and the reverse wrapper `.touchstone/methodology/scripts/external-review/external-review-claude.sh`
 (the orchestrator's model being reviewed). Both wrappers validate their output parent
-directories up front and **exit 2** when one is missing, and neither creates them: `--findings`
-and `--log` in both wrappers, plus `--wrapper-stderr-log` when the reverse wrapper is used for
-Codex direct invocation (Claude child stderr remains at `<log>.stderr`, sharing the `--log`
-parent). The directory also matters at *prompt-assembly* time, because the prompt-file lives
+directories up front and **exit 2** when one is missing, and neither creates them (`--findings`
+and `--log`; the reverse wrapper's extra outputs are in `references/external-review-reverse.md`).
+The directory also matters at *prompt-assembly* time, because the prompt-file lives
 under it too — so on a freshly copied-in host repo (where this directory does not yet exist)
 the first write or wrapper call fails before any review can start. This **exit 2 is a config
 error surfaced before any round** — distinct from a failed/unhealthy review round, and so not a
 retry-vs-skip degradation case. Creating the directory is the orchestrator's responsibility
 regardless of runtime; the concrete create command and flag mechanics are a runtime mechanism
-(the active runtime's notes file).
+(the active runtime's notes file; for the reverse wrapper, `references/external-review-reverse.md`).
 
-### The reverse direction — Codex orchestrates, Claude reviews
-
-The discipline above (parallel-arm, the output-directory precondition, prompt-assembly, the
-three teeth, graceful degradation) is runtime-neutral and governs BOTH directions. The
-FORWARD path's concrete invocation (the orchestrator's own model reviewing via a different
-family) is the active runtime's concrete and lives in its notes file. The REVERSE path's
-concrete contract is pinned HERE in the core — under the runtime-concretes carve-out above —
-because the runtime it serves, a **Codex/GPT orchestrator** wanting a Claude reviewer of a
-different family, has no separate notes file of its own. (No forward flag-contract sits in the
-core; only this reverse one does.)
-
-When Codex/GPT is the orchestrator and you want a Claude reviewer, drive
-`.touchstone/methodology/scripts/external-review/external-review-claude.sh` directly as the
-top-level executable. It owns ONLY the deterministic invocation; the orchestrator still owns
-prompt assembly, evidence verification, finding disposition, retry-vs-skip classification, and
-loop control — exactly as in the forward path, including the **output-directory precondition**
-above (`.touchstone/ext-review/<topic>/` must exist before assembling the prompt-file or
-invoking the wrapper, or it exits 2).
-
-For Codex `auto_review`, command shape is part of the safety contract. Create
-`.touchstone/ext-review/<topic>/` in a separate setup command, then invoke the wrapper directly
-with normal argv flags, including `--wrapper-stderr-log <file>`. Do not wrap the invocation in
-`bash -lc`, `zsh -lc`, `env ...`, `&&`, heredocs, or shell redirection; those shapes can make
-Codex evaluate a shell or compound command instead of the narrow, allowlisted wrapper and deny
-the request as private workspace disclosure. The local approval rule should name the exact
-absolute wrapper executable path for the trusted checkout or host repo, not `claude`, a shell,
-a directory, a repo-relative path, or a wildcard.
-
-**Invocation.** It runs headless `claude -p` with a sterile, billing-safe flag set:
-`--model` (default `claude-opus-5`), `--effort` (default `high`), `--max-budget-usd` (a hard
-subscription-spend cap, default `5`), `--web-search <on|off>` (default `off`), `--wrapper-stderr-log <file>`
-(durable copy of wrapper-owned status markers), `--output-format json`, and `--json-schema` (the schema
-CONTENT, read from the schema file). Sterility is assembled by flag — `--setting-sources ''`
-(drops user/project/local settings, so no hooks/plugins/permissions/apiKeyHelper),
-`--strict-mcp-config` with no `--mcp-config` (zero MCP servers), `--disable-slash-commands`
-(skills off), `--no-session-persistence`, `--no-chrome`, `--prompt-suggestions false` — plus a
-non-flag mechanism: the wrapper sets `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` (disables `CLAUDE.md` memory
-loading) and runs the review in a throwaway scratch cwd, so a `CLAUDE.md` cannot auto-discover into the prompt.
-`--bare` is deliberately NOT used (under `--bare`, OAuth/keychain auth is never read, which would
-defeat subscription billing). **Tool posture:** prompt-only by default (`--tools ""`) — the
-orchestrator inlines the diff/code into the prompt-file; passing `--repo <dir>` instead grants a
-READ-ONLY tool set (`--tools "Read,Grep,Glob"` plus `--add-dir <dir>`) and never any
-write-capable tool. When `--web-search on`, the wrapper adds `WebSearch,WebFetch` to that
-tool set and passes `--permission-mode auto`; it still grants no write-capable tools and no
-Bash. A web-enabled round remains structurally healthy or unhealthy by the same result-envelope
-contract; zero web calls is not itself a wrapper failure because the reviewer may decide no
-external premise needs checking.
-
-**Web-search policy.** The wrapper default is fail-closed (`--web-search off`). Consults,
+**Web-search policy.** Both wrappers default fail-closed (`--web-search off`). Consults,
 including escalation consults, should generally pass `--web-search on` when their advice may rest
 on current external facts. Plan-review rounds should pass it when the plan includes, depends on,
 or may have missed load-bearing external premises, and can turn it off for later convergence
@@ -1398,43 +1274,9 @@ rounds once those premises are resolved unless a new external-premise issue appe
 Implementation-review rounds receive the same reviewer instruction, but the orchestrator should
 enable wrapper web search only when the implementation diff introduces, changes, or leaves
 unresolved a non-local external premise. If a reviewer lacks web capability — because its runtime
-is not covered here or because the wrapper ran with `--web-search off` — it must raise
+has no wrapper web capability or because the wrapper ran with `--web-search off` — it must raise
 `unresolved external premise`, not return clean, when a load-bearing external premise cannot be
 resolved locally.
-
-**Billing fail-closed.** The reviewer MUST bill the interactive first-party subscription, never
-API per-token billing, an apiKeyHelper, or a 3P provider (Bedrock/Vertex/Foundry). Two mechanisms
-enforce this: a shared **env scrub** unsets every API/provider/gateway/OAuth-token route for both
-the preflight and the review (USER/HOME are deliberately preserved/repaired, since the OAuth token
-lives in the OS login keychain), and a **fail-closed preflight** — a LOCAL keychain read of
-`claude auth status --json` (no inference, no spend) — invokes review ONLY when it reports
-`loggedIn==true`, `authMethod=="claude.ai"`, `apiProvider=="firstParty"`, and `subscriptionType`
-in `{pro,max}`. It also rejects known local managed-settings paths (which could reintroduce
-env/apiKeyHelper routes).
-
-**Watchdog + health.** A per-round wall-clock watchdog (`--watchdog-seconds`, default `600`,
-positive-integer) reaps the reviewer's full process tree (direct PID + descendant tree + process
-group; TERM, grace, KILL) on expiry. The shell exit code of `claude -p` is never trusted; a
-structural health check on the JSON result envelope is authoritative (HEALTHY iff it parses,
-`type=="result"`, `is_error==false`, `subtype=="success"`, `structured_output` present and
-schema-valid, and `--model` is among the billed models).
-
-**Exit codes.** `0` HEALTHY round (findings-file ready to consume); `1` UNHEALTHY round
-(missing/garbled envelope, error, non-success subtype, or absent/invalid/model-mismatched
-structured output); `2` usage/config error (missing/unreadable arg, bad output dir, path
-collision, invalid watchdog); `3` AUTH/BILLING preflight FAILED — fail-closed, the review is NOT
-invoked (no spend), and the orchestrator treats it as a non-retryable skip and proceeds
-internal-only. So an unverified auth surface costs nothing and degrades gracefully.
-
-**Wrapper stderr capture.** The wrapper writes the full Claude result envelope to `--log` and
-the Claude subprocess stderr to `<log>.stderr`, but wrapper-owned status markers — including
-`AUTH OK`, health/usage summaries, and the final HEALTHY/UNHEALTHY line — belong to the wrapper
-process's own stderr stream. For Codex reverse review, persist them by passing
-`--wrapper-stderr-log <file>` on the direct wrapper invocation; that file is the durable per-round artifact
-for wrapper process stderr. The wrapper duplicates its own markers to both
-process stderr and that file after argument parsing, parent validation, and all path-collision
-checks have succeeded. `<log>.stderr` is not a substitute for it. This distinction is
-load-bearing for retry-vs-skip classification.
 
 ### The external-review prompt-assembly contract
 
@@ -1540,90 +1382,39 @@ unanticipated-problem protocol if undecidable. When you cannot decide whether a
 disposition reverses a deliberate behavior or merely fixes a defect, treat it as a
 triggered design-reversal (the tie-break favors gating).
 
-<!-- SYNC: the health-signal contract here — the non-blocking thresholds (first at review-round 10, then every 5), the review-round-counting exclusions, the whole-review-loop scope, AND the advisory-grounding of the in-memory round-counter reset (signal is advisory → reset changes the advisory signal's timing/visibility only, never correctness/termination; spend unbounded until convergence or interrupt) — is mirrored in TOUCHSTONE-claude.md § External cross-model review — Claude orchestrates, GPT reviews (the Cost note / health-signal pin). Update both together. -->
-**Non-convergence health signal (no hard cap).** The external loop carries **no hard
-round cap**; § Parallel-arm discipline → *Per-arm convergence / loop close-out* remains
-the **sole termination authority**; its full conjunction is not restated here.
-Touchstone has no plan-review precision *exception*, so a future change adding one
-must update this section explicitly.
-Terminable-precision findings are *classified* — they are rejected on the
-remediation-cost ground, which is a disposition, not a route. For
-liveness the orchestrator surfaces a **non-blocking** progress summary **first at
-review-round 10, then every 5 review-rounds thereafter** (10, 15, 20, … counted since
-the loop last (re)started) — round count, whether the actionable-finding stream is
-contracting vs. the same finding-class re-raising, net artifact churn, and
-material-vs-precision-only. The loop **continues automatically**; the user may interrupt.
-Pin BOTH thresholds — an unnamed threshold is as unenforceable as an unnamed cap: **10**
-(inheriting the deleted cap's value, so this is a *signal-vs-stop* change, not a cadence
-redesign) for the first signal and **every 5** for the recurrence. The signal is
-**whole-review-loop scoped** — it fires for internal-only runs too, not just the
-external loop the deleted cap was scoped to. Count **review rounds only** (artifact-review
-rounds that reach disposition) — exclude wrapper retries, config (exit-2) failures, and
-malformed-attestation re-spawns (§ Clean-verdict enforcement) plus delegated-timeout
-replacements (§ Delegated reviewer timeout); those attempts are not review rounds
-and neither reset convergence nor count toward it. The signal fires on rounds **since the loop last (re)started**, NOT a
-durably-cumulative count. `review-state.md` records logical rounds for recovery,
-but neither it nor the command-lifecycle `.touchstone/.session-state.md` is this
-restart-local advisory counter, so no new durable health-signal counter is minted.
-The in-memory reset is
-acceptable because the signal is **non-blocking and advisory** — the local round counter is a
-liveness *cue*, not a counter the loop gates on, a disposition input, or a terminator. Resetting
-it across a restart therefore changes the **advisory signal's timing/visibility only** — never
-convergence criteria, finding dispositions, or automatic termination. By the deliberate
-no-hard-cap choice, external-reviewer spend is **unbounded until convergence or a manual
-interrupt**: termination correctness comes solely from § Parallel-arm discipline → *Per-arm
-convergence / loop close-out*, and spend is bounded only by reaching that convergence or the user choosing to
-interrupt — the periodic summary is liveness visibility, **not** a spend or termination bound.
-The cap's old "safety net" against unbounded subscription-quota spend is thus replaced by this
-increasing-cadence signal plus the user-interrupt affordance; a genuinely diverging loop is the
-orchestrator's responsibility to escalate (§ The unanticipated-problem escalation protocol). A
-restart can *delay* the next periodic signal versus a durable counter — an accepted **messaging
-cost**, not a correctness one. (On resume the orchestrator MAY surface a one-line restart notice
-— local count reset to round 1, prior cumulative count may be unknown, next signal at local round
-10 — but this is an optional courtesy: it is **not** required for correctness, termination, or
-spend bounding, it is absent when no resume is detected, and the reset's acceptability does not
-depend on it.)
+**Non-convergence health signal (no hard cap).** The loop has no round cap; § Parallel-arm
+discipline → *Per-arm convergence / loop close-out* is the sole termination authority.
+Touchstone has no plan-review precision *exception*, so a future change adding one must update
+this section explicitly; terminable-precision findings are rejected on remediation cost — a
+disposition, not a route around this rule. For liveness, surface a **non-blocking** progress
+summary at review-round **10** and every **5** rounds after (round count; whether actionable
+findings are contracting or the same class keeps re-raising; net artifact churn; material vs
+precision-only), then continue automatically unless the user interrupts. The signal covers
+the whole review loop, internal-only runs included. Count only review rounds that reach
+disposition since the loop last (re)started — not wrapper retries, exit-2 config failures,
+malformed-attestation re-spawns (§ Clean-verdict enforcement), or delegated-timeout
+replacements (§ Delegated reviewer timeout). The counter is in-memory and deliberately not
+durable (neither `review-state.md` nor `.touchstone/.session-state.md` is it; mint none): it
+gates nothing, so a restart shifts only when the next summary appears. External spend is
+therefore bounded only by convergence or a user interrupt; escalating a genuinely diverging
+loop (§ The unanticipated-problem escalation protocol) is the orchestrator's job.
 
 ### Graceful degradation (classifier)
 
 When an external round is unhealthy, read the wrapper's log/markers and classify
-retry-vs-skip. For the reverse Claude wrapper, first run the deterministic helper
-`.touchstone/methodology/scripts/external-review/classify_external_review_failure.py`
-against a JSON payload carrying the wrapper exit code (`exit_code`), attempted wrapper
-(`attempted_wrapper`), runtime (`runtime`), route/export metadata (`argv`, `read_root_flag`,
-`diff_inlined`), durable wrapper process stderr (`wrapper_stderr`), and the full Claude result
-envelope (`result_envelope` or `log_path`). Assemble that `wrapper_stderr` from the
-`--wrapper-stderr-log` file produced by the direct reverse-wrapper invocation, distinct from the
-child-stderr `<log>.stderr` sink, so the `AUTH OK` marker the predicate gates on is read from the
-wrapper's stream and never the reviewer's — see § Wrapper stderr capture for the full rationale.
-The helper deliberately does not classify the
-post-preflight 401 case from generic `stderr`, reviewer stderr, or `log_excerpt`; those streams
-are diagnostic only. The helper is the executable field-level contract for the exact
-zero-usage-401 predicate, and it always emits `allow_unsandboxed_retry=false`.
+retry-vs-skip. The reverse wrapper adds a classifier helper and a smoke-gated
+post-preflight-auth retry; both are in `references/external-review-reverse.md`.
 
 Check **non-retryable** patterns FIRST (auth / permission / malformed-request /
-model-or-context-limit) → skip the external phase and proceed internal-only with a logged notice,
-with one narrow exception: if the reverse wrapper passed preflight (`AUTH OK` in the captured
-wrapper process stderr) and then exited `1` with classification
-`reverse_wrapper_post_preflight_auth_transient`, treat it as a post-preflight transient auth
-invocation failure. Run sterile no-repo smoke probes before classifying the external arm
-unavailable: `claude --setting-sources '' auth status --json`, then a tiny `claude -p` prompt
-such as `Return exactly OK.` from a scratch cwd with wrapper-equivalent sterile no-repo posture
-(billing-route env scrub, `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `--setting-sources ''`,
-`--strict-mcp-config`, `--disable-slash-commands`, `--no-session-persistence`, `--no-chrome`,
-`--prompt-suggestions false`, `--tools ""`, no `--add-dir`, no web tools, the same model/effort
-pin, and a small `--max-budget-usd` fuse). If both probes succeed, retry the same
-reverse-wrapper command once with fresh `--findings`/`--log` paths; if either probe fails or the
-retry fails, log external auth unavailable and proceed internal-only. Never request an
-unsandboxed repo/diff rerun for this class.
-
-That smoke-gated single retry is a semantic post-preflight recovery path, not the generic
-transport retry rule. Then check **retryable** patterns (rate-limit / overload / 5xx / timeout)
-→ retry with bounded backoff (2–3 attempts); if it survives those, treat it as terminal and
-skip-and-proceed. A watchdog trip that leaves the round unhealthy carries a `timed out` marker
-and classifies as retryable. Quota exhaustion surfaces as a never-clearing rate-limit or an
-unclassified error; either way it converges on skip-and-proceed. Correctness never depends on
-recognizing an exact error string.
+model-or-context-limit) → skip the external phase and proceed internal-only with a logged
+notice — except a reverse-wrapper round that passed preflight and classifies
+`reverse_wrapper_post_preflight_auth_transient`, which follows the reference's smoke-gated
+single retry instead of skipping. Then check **retryable** patterns (rate-limit / overload /
+5xx / timeout) → retry with bounded backoff (2–3 attempts); if it survives those, treat it as
+terminal and skip-and-proceed. A watchdog trip that leaves the round unhealthy carries a
+`timed out` marker and classifies as retryable. Quota exhaustion surfaces as a never-clearing
+rate-limit or an unclassified error; either way it converges on skip-and-proceed. Correctness
+never depends on recognizing an exact error string.
 
 ## A minimal Touchstone loop
 

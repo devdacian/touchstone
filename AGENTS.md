@@ -4,9 +4,10 @@ This repo develops Touchstone and dogfoods it on itself; the methodology lives
 under `.touchstone/methodology/`.
 
 Before any skill / methodology / Touchstone / consult / review-loop / external-review
-work, FIRST read `.touchstone/methodology/TOUCHSTONE.md` — the COMPLETE runtime-neutral
-process, self-sufficient for a Codex orchestrator (it includes the pinned reverse
-cross-model wrapper for running a Claude reviewer). Under Claude Code, ALSO read
+work, FIRST read `.touchstone/methodology/TOUCHSTONE.md` — the runtime-neutral process. When
+orchestrating a Claude reviewer, ALSO read
+`.touchstone/methodology/references/external-review-reverse.md` (the pinned reverse
+cross-model wrapper contract). Under Claude Code, ALSO read
 `.touchstone/methodology/TOUCHSTONE-claude.md` for the Claude-specific mechanisms.
 
 This repo's own dogfood tests for the external-review machinery live in

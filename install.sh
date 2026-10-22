@@ -463,7 +463,11 @@ the installer never stages or commits for you:
 
 To upgrade later: ./install.sh <host> --force → review `git diff .touchstone/methodology`
 → commit as above. --force refuses if your methodology has uncommitted local changes
-(commit/stash first, or pass --discard-local to overwrite them).
+(commit/stash first, or pass --discard-local to overwrite them). If you pasted the
+AGENTS.md stanza or the README pointer from an earlier install, compare them with the
+current text printed below: older copies claim the core alone contains the reverse
+wrapper contract, which now lives in references/external-review-reverse.md (the core's
+intro points there, so a stale copy still reaches it).
 --------------------------------------------------------------------------------
 COMMITNOTE
 fi
@@ -483,7 +487,8 @@ read `.touchstone/methodology/TOUCHSTONE.md` (the runtime-neutral process) and
 `.touchstone/methodology/TOUCHSTONE-claude.md` (the Claude Code binding).
 
 Optional — always-on eager load: to pull the methodology into EVERY Claude session
-(~96 KiB; worth it only if Touchstone is used often), add the two lines shown in the
+(it counts toward Claude Code's instruction-size budget; worth it only if Touchstone is
+used often), add the two lines shown in the
 fenced block below to the TOP of your CLAUDE.md, OUTSIDE the fence. An @import inside
 a fenced code block is intentionally inert, so these stay OFF until you move them out:
 
@@ -496,9 +501,10 @@ a fenced code block is intentionally inert, so these stay OFF until you move the
 ----- paste into your host's AGENTS.md (Codex / OpenCode) ------------------------
 This repo has Touchstone installed under `.touchstone/methodology/`. Before any
 skill / methodology / Touchstone / consult / review-loop / external-review work,
-FIRST read `.touchstone/methodology/TOUCHSTONE.md` — the COMPLETE runtime-neutral
-process, self-sufficient for a Codex orchestrator (it includes the pinned reverse
-cross-model wrapper for running a Claude reviewer). Under Claude Code, ALSO read
+FIRST read `.touchstone/methodology/TOUCHSTONE.md` — the runtime-neutral process. When
+orchestrating a Claude reviewer, ALSO read
+`.touchstone/methodology/references/external-review-reverse.md` (the pinned reverse
+cross-model wrapper contract). Under Claude Code, ALSO read
 `.touchstone/methodology/TOUCHSTONE-claude.md` for the Claude-specific mechanisms.
 ----------------------------------------------------------------------------------
 
@@ -531,7 +537,7 @@ Claude Code orchestrates -> GPT/Codex reviews:
 
 Codex/GPT orchestrates -> Claude reviews:
 
-1. Install Claude Code and sign in with a Claude Pro/Max subscription.
+1. Install Claude Code and sign in with a Claude Pro/Max/Team subscription.
 2. For Codex auto_review, add a narrow rule to ~/.codex/rules/default.rules,
    then restart Codex:
 
@@ -586,7 +592,7 @@ loop, launch your runtime in auto mode and paste a prompt like:
 > `.touchstone/plans/`, not a runtime plan mode.
 
 Under Claude Code the agent also reads `.touchstone/methodology/TOUCHSTONE-claude.md`
-automatically; under Codex CLI the runtime-neutral core is self-sufficient.
+automatically.
 ----------------------------------------------------------------------------------
 
 This pointer cites only STABLE methodology paths, so it does NOT need re-pasting
